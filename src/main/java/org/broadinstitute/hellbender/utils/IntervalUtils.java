@@ -12,6 +12,7 @@ import htsjdk.samtools.util.OverlapDetector;
 import htsjdk.tribble.Feature;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import javafx.collections.transformation.SortedList;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
@@ -29,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.BinaryOperator;
 import java.util.stream.Collectors;
 
 /**
@@ -64,6 +66,24 @@ public final class IntervalUtils {
             Comparator.comparing(Locatable::getContig,Comparator.nullsLast(String::compareTo))
                     .thenComparingInt(Locatable::getStart)
                     .thenComparingInt(Locatable::getEnd);
+
+    /**
+     * Comparator for locatables within the same contig.
+     * <p>
+     *     Attempts to compare locatables from two difference contigs will result in an exception.
+     * </p>
+     * <p>
+     *     It accepts a {@code null} as a possible contig.
+     * </p>
+     */
+    public static final Comparator<Locatable> INTRA_CONTIG_ORDER_COMPARATOR = (a, b) -> {
+        if (!Objects.equals(a.getContig(), b.getContig())) {
+            throw new IllegalArgumentException("this comparator cannot handle comparison across contigs");
+        } else {
+            final int startCmp = Integer.compare(a.getStart(), b.getStart());
+            return startCmp != 0 ? startCmp : Integer.compare(a.getEnd(), b.getEnd());
+        }
+    };
 
     private static final Logger logger = LogManager.getLogger(IntervalUtils.class);
 
@@ -839,6 +859,45 @@ public final class IntervalUtils {
         return String.format("%s:%s-%s", interval.getContig(), interval.getStart(), interval.getEnd());
     }
 
+    /**
+     * Return a list with the input interval sorted using the reference dictionary to indicate order across contigs
+     * where overlapping intervals are merged.
+     * <p>
+     *     Within each chromosome we list first the intervals with lower start position.
+     * </p>
+     * @param intervals the input intervals, cannot be {@code null} but perhaps empty.
+     * @param referenceDictionary the input reference sequence dictionary, cannot be {@code null} but perhaps empty.
+     *
+     * @throws IllegalArgumentException if any of the following is true:
+     * <ul>
+     *     <li>the input {@code intervals} is {@code null},</li>
+     *     <li>the input {@code referenceDictionary} is {@code null},</li>
+     *     <li>the input {@code intervals} list contains {@code null} elements or</li>
+     *     <li>the input {@code intervals} list contains intervals with a contig that is not in the input {@code referenceDictionary}.</li>
+     * </ul>
+     *
+     * @return never {@code null}, the returned list can be farther modified for the invoking code.
+     */
+    public static List<SimpleInterval> sortAndMergeIntervals(final Collection<SimpleInterval> intervals,
+                                                             final SAMSequenceDictionary referenceDictionary,
+                                                             final IntervalMergingRule mergingRule) {
+        Utils.nonNull(referenceDictionary);
+        Utils.nonNull(intervals);
+        Utils.nonNull(mergingRule);
+        final GenomeLocParser parser = new GenomeLocParser(referenceDictionary);
+        final List<GenomeLoc> locs = new ArrayList<>(intervals.size());
+        for (final SimpleInterval interval : intervals) {
+            Utils.nonNull(interval, "the input interval collection contains null elements");
+            if (referenceDictionary.getSequence(interval.getContig()) == null) {
+                throw new IllegalArgumentException("there is at least one input interval with an unknown contig: " + interval);
+            }
+            locs.add(parser.createGenomeLoc(interval));
+        }
+        return sortAndMergeIntervals(parser, locs, mergingRule).stream()
+                .map(loc -> new SimpleInterval(loc.getContig(), loc.getStart(), loc.getEnd()))
+                .collect(Collectors.toList());
+    }
+
     private static final class SplitLocusRecursive {
         final List<GenomeLoc> split;
         final LinkedList<GenomeLoc> remaining;
@@ -897,7 +956,11 @@ public final class IntervalUtils {
     }
 
     /**
-     * merge a list of genome locs that may be overlapping, returning the list of unique genomic locations
+     * merge a list of genome locs that may be overlapping, returning the list of unique genomic locations.
+     * <p>
+     *     The genome locations can only be merged with adjacent location in the input list, therefore the
+     *     input must be contig and coordinate sorted for all overlapping locations to be merged.
+     * </p>
      *
      * @param raw the unchecked genome loc list
      * @param rule the merging rule we're using
@@ -926,6 +989,88 @@ public final class IntervalUtils {
             return Collections.unmodifiableList(merged);
         }
     }
+
+    /**
+     * Returns a map with all overlapping intervals merged for each contig.
+     * @param intervals the collection of intervals to merge.
+     * @param mergeAbutters whether adjacent intervals should be merged into one.
+     * @return never {@code null}.
+     */
+    public static Map<String, List<SimpleInterval>> sortAndMergeIntervals(final Collection<SimpleInterval> intervals, final boolean mergeAbutters) {
+        return sortAndMergeLocatables(intervals, (a, b) -> new SimpleInterval(a.getContig(), a.getStart(), Math.max(a.getEnd(), b.getEnd())), mergeAbutters);
+    }
+
+    /**
+     * Returns a map organized by contig where all overlapping locatables in the input collection are merged into a single instance.
+     * <p>
+     * Locatables are merged greedily so that two locatables that originally may not overlap
+     * will be merged into the same instance together with any of chain overlapping locatables that
+     * closes the gap bewtween both.
+     * </p>
+     * <p>
+     *     The invoker needs to provide a {@code merge} binary operator that reduces two overlapping
+     *     {@link L} instances into one that would enclose both "tightly".
+     * </p>
+     * <p>
+     *     The {@code merge} binary-operator can make the following assumptions on its parameters {@code (a, b)}:
+     *     <ul>
+     *         <li>neither {@code a} nor {@code b} is {@code null},</li>
+     *         <li>either {@code a.getContig()} and {@code b.getContig()} return both {@code null} or the same contig name and</li>
+     *         <li>that {@code a.getStart() <= b.getStart()},</li>
+     *         <li>that {@code a} and {@code b} overlap or that they are adjacent if {@code mergeAbutters} is {@code true}.</li>
+     *     </ul>
+     *     In contrast it in not guaranteed that {@code a.getEnd() <= b.getEnd()}, as {@code b} might be fully enclosed in
+     *     {@code a}.
+     * </p>
+     * <p>
+     *     In addition, the {@code merge} binary-operator result {@code x} of merging two locatables {@code a} and {@code b} must:
+     *     <ul>
+     *         <li>have the same contig than either {@code a} and {@code b} and</li>
+     *         <li>{@code x.getStart() == Math.min(a.getStart(), b.getStart()) == a.getStart()}.</li>
+     *     </ul>
+     * </p>
+     * <p>
+     *     The result {@link Map map} will have exactly one entry for each contig present in the input locatable collection.
+     *     Each entry's value list is the coordinate sorted list of merged locatables for that contig; first come
+     *     locatables with a smaller {@link Locatable#getStart}.
+     * </p>
+     *
+     * @param locatables collections of locatables to be merged.
+     * @param merge binary-operator. that merges two locatables.
+     * @param <L> type of the locatables.
+     *
+     * @return never {@code null}.
+     */
+    public static <L extends Locatable> Map<String, List<L>> sortAndMergeLocatables(
+            final Collection<L> locatables, final BinaryOperator<L> merge, final boolean mergeAbutters) {
+        Utils.nonNull(locatables, "input locatable");
+        final Map<String, TreeSet<L>> byContig = new LinkedHashMap<>();
+        for (final L locatable : locatables) {
+            Utils.nonNull(locatable, "input locatable must not contain null");
+            final String contig = locatable.getContig();
+            final TreeSet<L> contigLocatables = byContig.computeIfAbsent(contig, (c) -> new TreeSet<>(INTRA_CONTIG_ORDER_COMPARATOR));
+            contigLocatables.add(locatable);
+        }
+        final Map<String, List<L>> result = new LinkedHashMap<>(byContig.size());
+        for (final TreeSet<L> contigLocatables : byContig.values()) {
+            final List<L> list = new ArrayList<>(contigLocatables.size());
+            final Iterator<L> it = contigLocatables.iterator();
+            L previous = it.next(); // cannot be empty, so this always works.
+            while (it.hasNext()) {
+                final L next = it.next();
+                if (IntervalUtils.overlaps(previous, next) || (mergeAbutters && next.getStart() == previous.getEnd() + 1)) {
+                    previous = merge.apply(previous, next);
+                } else {
+                    list.add(previous);
+                    previous = next;
+                }
+            }
+            list.add(previous);
+            result.put(list.get(0).getContig(), list);
+        }
+        return result;
+    }
+
 
     public static long intervalSize(final List<GenomeLoc> locs) {
         long size = 0;

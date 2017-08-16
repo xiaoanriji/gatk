@@ -594,7 +594,7 @@ public final class FindBreakpointEvidenceSpark extends GATKSparkTool {
                 .collect();
 
         SparkUtils.destroyBroadcast(broadcastQNamesMultiMap, "QNames multi map");
-        BwaMemIndexCache.closeAllDistributedInstances(ctx);
+        BwaMemIndexCache.closeAllDistributedGlobalInstances(ctx);
 
         return intervalDispositions;
     }

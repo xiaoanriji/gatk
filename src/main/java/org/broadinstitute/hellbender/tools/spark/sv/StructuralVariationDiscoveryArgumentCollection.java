@@ -7,6 +7,7 @@ import org.broadinstitute.barclay.argparser.Hidden;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
+import java.io.File;
 import java.io.Serializable;
 
 
@@ -210,7 +211,7 @@ public class StructuralVariationDiscoveryArgumentCollection implements Serializa
         /**
          * This is a path to a text file of contig names (one per line) that will be ignored when looking for inter-contig pairs.
          */
-        @Argument(doc = "file containing alt contig names that will be ignored when looking for inter-contig pairs",
+        @Argument(doc = "file containing altHaplotype contig names that will be ignored when looking for inter-contig pairs",
                 fullName = "cross-contigs-to-ignore", optional = true)
         public String crossContigsToIgnoreFile;
 

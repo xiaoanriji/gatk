@@ -1,7 +1,8 @@
 package org.broadinstitute.hellbender.tools.spark.sv;
 
-import org.apache.commons.math3.distribution.AbstractIntegerDistribution;
-import org.apache.commons.math3.distribution.IntegerDistribution;
+import org.apache.commons.math3.distribution.LogNormalDistribution;
+import org.apache.commons.math3.distribution.NormalDistribution;
+import org.apache.commons.math3.distribution.RealDistribution;
 import org.broadinstitute.hellbender.exceptions.UserException;
 
 import java.io.Serializable;
@@ -9,31 +10,45 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Holds the information characterizing and insert size distribution.
+ * Created by valentin on 5/18/17.
  */
 public class InsertSizeDistribution implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private static Pattern DESCRIPTION_PATTERN =
-            Pattern.compile("^\\s*(?<name>[^\\s\\(\\)]+)\\s*\\((?<mean>[^,\\(\\)]+?)\\s*(?:,\\s*(?<stddev>[^,\\(\\)]+?)\\s*)?\\)\\s*");
+    public static final String MEAN_DISTR_PARAM_NAME = "mean";
+    public static final String SD_DISTR_PARAM_NAME = "sd";
+    public static final String SHAPE_DISTR_PARAM_NAME = "shape";
+    public static final String SCALE_DISTR_PARAM_NAME = "scale";
+
+    private static Pattern NORMAL_DISTR_PATTERN = Pattern.compile(
+            String.format("^N(?:orm(?:al)?)?\\(\\s*(?<%s>\\S+)\\s*,\\s*(?<%s>\\S+)\\s*\\)",MEAN_DISTR_PARAM_NAME, SD_DISTR_PARAM_NAME));
+
+    private static Pattern LOG_NORMAL_DISTR_PATTERN = Pattern.compile(
+            String.format("^(?:(?:ln)|(?:log))N(?:orm(?:al)?)?\\(\\s*(?<%s>\\S+)\\s*,\\s*(?<%s>\\S+)\\s*\\)",SCALE_DISTR_PARAM_NAME, SHAPE_DISTR_PARAM_NAME));
+
 
     private final String description;
 
-    private transient AbstractIntegerDistribution dist;
+    private transient RealDistribution dist;
 
-    private AbstractIntegerDistribution dist() {
+    private RealDistribution dist() {
         initializeDistribution();
         return dist;
     }
 
-    public double mean() {
+    public double average() {
         return dist().getNumericalMean();
     }
 
-    public double variance() { return dist().getNumericalVariance(); }
+    public int quantile(final double prob) {
+        final double result =  Math.round(dist().inverseCumulativeProbability(prob));
+        return result >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) result;
+    }
 
-    public double stddev() { return Math.sqrt(variance()); }
+    public double logCumulativeProbability(final int value) {
+        return Math.log(dist().cumulativeProbability(value));
+    }
 
     public InsertSizeDistribution(final String distrString) {
         this.description = distrString;
@@ -41,82 +56,67 @@ public class InsertSizeDistribution implements Serializable {
     }
 
     private void initializeDistribution() {
-        if (!description.matches(DESCRIPTION_PATTERN.pattern())) {
-            throw new UserException.BadInput("unsupported insert size distribution description format: " + description);
+        if (dist == null) {
+            if (description.matches(NORMAL_DISTR_PATTERN.pattern())) {
+                dist = parseNormalDistribution(description);
+            } else if (description.matches(LOG_NORMAL_DISTR_PATTERN.pattern())) {
+                dist = parseLogNormalDistribution(description);
+            }
+            else {
+                throw new IllegalArgumentException("unsupported insert size distribution description: " + description);
+            }
         }
-        final Matcher matcher = DESCRIPTION_PATTERN.matcher(description);
+    }
+
+    private static RealDistribution parseNormalDistribution(final String distrString) {
+        final Matcher matcher = NORMAL_DISTR_PATTERN.matcher(distrString);
         if (!matcher.find()) {
-            throw new UserException.BadInput("the insert-size distribution spec is not up to standard: " + description);
+            throw new IllegalArgumentException("bad description: " + distrString);
         }
-        final String nameString = matcher.group("name");
-        final String meanString = matcher.group("mean");
-        final String stddevString = matcher.group("stddev");
-        final InsertSizeDistributionShape type = extractDistributionShape(nameString, description);
-        if (stddevString != null) {
-            final double mean = extractDoubleParameter("mean", description, meanString, 0, Double.MAX_VALUE);
-            final double stddev = extractDoubleParameter("stddev", description, stddevString, 0, Double.MAX_VALUE);
-            dist = type.fromMeanAndStdDeviation(mean, stddev);
+        final double mean = Double.parseDouble(matcher.group(MEAN_DISTR_PARAM_NAME));
+        final double sd = Double.parseDouble(matcher.group(SD_DISTR_PARAM_NAME));
+        if (!Double.isFinite(mean)) {
+            throw new UserException.BadInput(String.format("bad insert distribution mean value, must be a finite double but you provided: %d",  mean));
+        } else if (!Double.isFinite(sd) || sd <= 0) {
+            throw new UserException.BadInput(String.format("bad insert distribution std. dev. value must be a strictly positive finite but you provided: %d", sd));
         } else {
-            dist = type.fromReadMetadataFile(meanString);
+            return new NormalDistribution(mean, sd);
         }
     }
 
-    private static InsertSizeDistributionShape extractDistributionShape(final String nameString, final String description) {
-        final InsertSizeDistributionShape result = InsertSizeDistributionShape.decode(nameString);
-        if (result == null) {
-            throw new UserException.BadInput("unsupported insert size distribution name '" + nameString
-                    + "' in description: " + description);
+    private static RealDistribution parseLogNormalDistribution(final String distrString) {
+        final Matcher matcher = LOG_NORMAL_DISTR_PATTERN.matcher(distrString);
+        if (!matcher.find()) {
+            throw new IllegalArgumentException("bad description: " + distrString);
         }
-        return result;
-    }
-
-    private static double extractDoubleParameter(final String name, final String description,
-                                                       final String valueString, final double min,
-                                                       final double max) {
-        final double value;
-        try {
-            value = Double.parseDouble(valueString);
-        } catch (final NumberFormatException ex) {
-            throw new UserException.BadInput("bad " + name + " string '" + valueString + "' in insert size distribution description: "  + description);
-        }
-        if (value < min || Double.isInfinite(value) || Double.isNaN(value) || value > max) {
-            throw new UserException.BadInput("bad " + name + " value '" + value + "' in insert size distribution description: " + description);
-        }
-        return value;
-    }
-
-    @Override
-    public String toString() {
-        return description;
-    }
-
-    @Override
-    public int hashCode() {
-        return dist().hashCode();
-    }
-
-    @Override
-    public boolean equals(final Object obj) {
-        if (!(obj instanceof InsertSizeDistribution)) {
-            return false;
+        final double scale = Double.parseDouble(matcher.group(SCALE_DISTR_PARAM_NAME));
+        final double shape = Double.parseDouble(matcher.group(SHAPE_DISTR_PARAM_NAME));
+        if (!Double.isFinite(scale)) {
+            throw new UserException.BadInput(String.format("bad insert distribution mean value, must be a finite double but you provided: %d",  scale));
+        } else if (!Double.isFinite(shape) || shape <= 0) {
+            throw new UserException.BadInput(String.format("bad insert distribution std. dev. value must be a strictly positive finite but you provided: %d", shape));
         } else {
-            return ((InsertSizeDistribution)obj).dist().equals(dist());
+            return new LogNormalDistribution(scale, shape);
         }
     }
 
     public int minimum() {
-        return Math.max(0, dist().getSupportLowerBound());
+        return (int) Math.max(0, dist().getSupportLowerBound());
     }
 
     public int maximum() {
-        return Math.min(Integer.MAX_VALUE, dist().getSupportUpperBound());
+        return (int) Math.min(Integer.MAX_VALUE, dist().getSupportUpperBound());
     }
 
     public double probability(final int size) {
-        return dist().probability(size);
+        return dist().density(size);
     }
 
     public double logProbability(final int size) {
-        return dist().logProbability(size);
+        return Math.log(probability(size));
+    }
+
+    public double stddev() {
+        return Math.sqrt(dist().getNumericalVariance());
     }
 }

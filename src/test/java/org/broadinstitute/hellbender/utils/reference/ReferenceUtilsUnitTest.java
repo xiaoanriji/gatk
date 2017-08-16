@@ -1,12 +1,21 @@
 package org.broadinstitute.hellbender.utils.reference;
 
 import htsjdk.samtools.SAMSequenceDictionary;
+import htsjdk.samtools.SAMSequenceRecord;
+import htsjdk.samtools.reference.FastaSequenceIndex;
+import htsjdk.samtools.reference.FastaSequenceIndexCreator;
+import org.broadinstitute.hellbender.engine.ReferenceFileSource;
+import org.broadinstitute.hellbender.engine.datasources.ReferenceSource;
 import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.utils.RandomDNA;
 import org.broadinstitute.hellbender.utils.gcs.BucketUtils;
 import org.broadinstitute.hellbender.GATKBaseTest;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 import org.testng.annotations.DataProvider;
+
+import java.nio.file.Paths;
+import java.util.*;
 
 import java.io.*;
 

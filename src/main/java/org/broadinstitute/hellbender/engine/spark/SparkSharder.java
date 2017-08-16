@@ -1,9 +1,9 @@
 package org.broadinstitute.hellbender.engine.spark;
 
-import com.google.common.base.Function;
 import com.google.common.collect.*;
 import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.samtools.SAMSequenceRecord;
+import htsjdk.samtools.util.Lazy;
 import htsjdk.samtools.util.Locatable;
 import htsjdk.samtools.util.OverlapDetector;
 import org.apache.spark.Partitioner;
@@ -20,8 +20,17 @@ import org.broadinstitute.hellbender.engine.Shard;
 import org.broadinstitute.hellbender.engine.ShardBoundary;
 import org.broadinstitute.hellbender.engine.ShardBoundaryShard;
 import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.tools.spark.sv.utils.SVInterval;
+import org.broadinstitute.hellbender.tools.spark.sv.utils.SVIntervalLocator;
+import org.broadinstitute.hellbender.tools.spark.sv.utils.SVIntervalTree;
+import org.broadinstitute.hellbender.tools.spark.sv.utils.ShardPartitioner;
+import org.broadinstitute.hellbender.tools.spark.sv.utils.SimpleShard;
+import org.broadinstitute.hellbender.utils.IntervalUtils;
+import org.broadinstitute.hellbender.utils.SerializableFunction;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
+import org.broadinstitute.hellbender.utils.collections.IntervalsSkipList;
+import org.broadinstitute.hellbender.utils.param.ParamUtils;
 import scala.Option;
 import scala.Tuple2;
 import scala.reflect.ClassTag;
@@ -30,13 +39,160 @@ import scala.reflect.ClassTag$;
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.broadinstitute.hellbender.utils.IntervalUtils.overlaps;
 
 /**
  * Utility methods for sharding {@link Locatable} objects (such as reads) for given intervals, without using a shuffle.
  */
-public class SparkSharder {
+public final class SparkSharder {
+
+    private final JavaSparkContext ctx;
+    private final SVIntervalTree<SimpleInterval> shards;
+    private final SVIntervalLocator locator;
+    private final Lazy<Broadcast<SVIntervalTree<SimpleInterval>>> shardsBroadCast;
+    private final Lazy<Broadcast<SVIntervalLocator>> locatorBroadCast;
+    private final List<SimpleInterval> shardList;
+
+    /**
+     * Creates an {@link SparkSharder} instance.
+     * <p>
+     *     Subsequent class to instance methods will use the common parameter passed to the constructor:
+     *     the {@link JavaSparkContext spark-context}, {@link SAMSequenceDictionary sequence-dictionary},
+     *     {@link List<ShardBoundary> shard-intervals} and maximum locatable length.
+     * </p>
+     *
+     * @param ctx the underlying {@link JavaSparkContext}.
+     * @param svIntervalLocator Locatable to/from SVInterval translator.
+     * @param intervals
+     */
+    public <L extends Locatable> SparkSharder(final JavaSparkContext ctx, final SVIntervalLocator svIntervalLocator,
+                        final Collection<L> intervals) {
+        this.ctx = Utils.nonNull(ctx);
+        this.locator = Utils.nonNull(svIntervalLocator);
+        this.shards = new SVIntervalTree<>();
+        for (final L element : intervals) {
+            this.shards.put(locator.toSVInterval(element), SimpleInterval.of(element));
+        }
+        Utils.nonNull(intervals, "the input shard intervals list must be greater than 0");
+        //this.maxLocatableLength = ParamUtils.isPositive(maxLocatableLength, "the maximum locatable length must be greater than 0");
+        this.shardList = Utils.stream(shards).map(SVIntervalTree.Entry::getValue).collect(Collectors.toList());
+        this.shardsBroadCast = new Lazy<>(() -> this.ctx.broadcast(shards));
+        this.locatorBroadCast = new Lazy<>(() -> this.ctx.broadcast(locator));
+    }
+
+    /**
+     * Free held up resources.
+     * @param blocking whether this operation is blocking (until resources have been freed) or not.
+     */
+    public void destroy(final boolean blocking) {
+        if (this.shardsBroadCast.isInitialized()) {
+            this.shardsBroadCast.get().destroy(blocking);
+        }
+        if (this.locatorBroadCast.isInitialized()) {
+            this.locatorBroadCast.get().destroy(blocking);
+        }
+    }
+
+   public SparkSharder(final JavaSparkContext ctx, final SAMSequenceDictionary sequenceDictionary,
+                       final List<SimpleInterval> intervals, final int shardSize, final int shardPadding) {
+       this(ctx, SVIntervalLocator.of(sequenceDictionary), divideIntoShards(sequenceDictionary, intervals, shardSize, shardPadding));
+   }
+
+    private static List<ShardBoundary> divideIntoShards(final SAMSequenceDictionary sequenceDictionary, final List<SimpleInterval> intervals, final int shardSize, final int shardPadding) {
+        Utils.nonNull(sequenceDictionary);
+        ParamUtils.isPositive(shardSize, "the shard size must be positive");
+        ParamUtils.isPositiveOrZero(shardPadding, "the shard padding must be 0 or greater");
+        final Map<String, List<SimpleInterval>> consolidatedIntervals = IntervalUtils.sortAndMergeIntervals(intervals, true);
+        return consolidatedIntervals.values().stream()
+                .flatMap(List::stream)
+                .flatMap(interval -> Shard.divideIntervalIntoShards(interval, shardSize, shardPadding, sequenceDictionary).stream())
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Create an RDD of {@link Shard} from an RDD of coordinate sorted {@link Locatable} <i>without using a shuffle</i>.
+     * Each shard contains the {@link Locatable} objects that overlap it (including overlapping only padding).
+     * @param locatables the RDD of {@link Locatable}, must be coordinate sorted
+     * @param <L> the {@link Locatable} type
+     * @return an RDD of {@link Shard} of overlapping {@link Locatable} objects (including overlapping only padding)
+     */
+    public <L extends Locatable> JavaRDD<Shard<L>> shard(final JavaRDD<L> locatables) {
+        final Broadcast<SVIntervalTree<SimpleInterval>> shardsBroadCast = this.shardsBroadCast.get();
+        final Broadcast<SVIntervalLocator> locatorBroadcast = this.locatorBroadCast.get();
+        return locatables.mapPartitionsToPair(it -> {
+            final SVIntervalTree<SimpleInterval> shards = shardsBroadCast.getValue();
+            final SVIntervalLocator locator = locatorBroadcast.getValue();
+            final Map<SimpleInterval, List<L>> shardsSets = new HashMap<>();
+            it.forEachRemaining(l -> {
+                final Iterator<SVIntervalTree.Entry<SimpleInterval>> overlapping = shards.overlappers(locator.toSVInterval(l));
+                overlapping.forEachRemaining(entry -> {
+                    final List<L> values = shardsSets.computeIfAbsent(entry.getValue(), o -> new ArrayList<>());
+                    values.add(l);
+                });
+            });
+            return shardsSets.entrySet().stream()
+                    .map(entry ->
+                            new Tuple2<>(entry.getKey(), entry.getValue()))
+                    .iterator();
+        }).partitionBy(partitioner(SimpleInterval.class, locatables.getNumPartitions()))
+          .reduceByKey((l1, l2) -> { l1.addAll(l2); return l1; })
+          .map(tuple -> SimpleShard.of(tuple._1(), tuple._2()));
+    }
+
+    /**
+     * Join in a new pair rdd data from the same shard from two sharded rdds.
+     *
+     * @param left the rdd that will provide the left/key elements.
+     * @param right the rdd that will provide the right/value elements.
+     * @param <L> the type of the "left" or key shard data
+     * @param <R> the type of the "right" or value shard data.
+     * @return never {@code null}.
+     */
+    public <L, R> JavaPairRDD<Shard<L>, Shard<R>> cogroup(final JavaRDD<Shard<L>> left, JavaRDD<Shard<R>> right) {
+        final JavaPairRDD<SimpleInterval, Shard<L>> leftWithIntervalKey = left.mapToPair(shard -> new Tuple2<>(shard.getInterval(), shard));
+        final JavaPairRDD<SimpleInterval, Shard<R>> rightWithIntervalKey = right.mapToPair(shard -> new Tuple2<>(shard.getInterval(), shard));
+        return leftWithIntervalKey.join(rightWithIntervalKey).mapToPair(Tuple2::_2);
+    }
+
+    public <L extends Locatable> Partitioner shardPartitioner(final Class<L> clazz, final JavaPairRDD<L, ?> rdd) {
+        Utils.nonNull(rdd);
+        return new ShardPartitioner<>(clazz, shardList, rdd.getNumPartitions());
+    }
+
+    public <K extends Locatable, V> JavaPairRDD<K, V> partition(final Class<K> clazz, final JavaPairRDD<K, V> rdd) {
+        Utils.nonNull(rdd);
+        return rdd.partitionBy(shardPartitioner(clazz, rdd));
+    }
+
+    /**
+     * Given a cogrouped shared paired rdd, reduce the values into iterables that match a common matching-key with
+     * a left/key value.
+     * @param jrdd the cogrouped shared paired rdd to process.
+     * @param leftMatchingKey key extractor for the left elements.
+     * @param rightMatchingKey key extractor for the right elements.
+     * @param <L> the type for the left element.
+     * @param <R> the type for the right element.
+     * @param <K> the type for the matching key.
+     * @return never {@code null}.
+     */
+    public <L extends Locatable, R extends Locatable, K> JavaPairRDD<L, Iterable<R>> matchLeftByKey(
+            final JavaPairRDD<Shard<L>, Shard<R>> jrdd,
+            final SerializableFunction<L, K> leftMatchingKey,
+            final SerializableFunction<R, K> rightMatchingKey) {
+
+        return jrdd.flatMap(tuple -> {
+            final Map<K, List<L>> ls = Utils.stream(tuple._1())
+                    .collect(Collectors.groupingBy(leftMatchingKey));
+            final Map<K, List<R>> rs = Utils.stream(tuple._2())
+                    .collect(Collectors.groupingBy(rightMatchingKey));
+            final Stream<Tuple2<L, List<R>>> lAndRs = ls.keySet().stream().flatMap(k ->
+                    ls.get(k).stream().map(l -> new Tuple2<>(l, rs.getOrDefault(k, Collections.emptyList()))));
+            return lAndRs.iterator();
+        }).mapToPair(tuple -> new Tuple2<>(tuple._1(), tuple._2()));
+    }
+
     /**
      * Create an RDD of {@link Shard} from an RDD of coordinate sorted {@link Locatable} <i>without using a shuffle</i>.
      * Each shard contains the {@link Locatable} objects that overlap it (including overlapping only padding).
@@ -125,7 +281,7 @@ public class SparkSharder {
                                                                                             SAMSequenceDictionary sequenceDictionary, List<I> intervals,
                                                                                             int maxLocatableLength, MapFunction<Tuple2<I, Iterable<L>>, T> f) {
         return joinOverlapping(ctx, locatables, locatableClass, sequenceDictionary, intervals, maxLocatableLength,
-                (FlatMapFunction2<Iterator<L>, Iterator<I>, T>) (locatablesIterator, shardsIterator) -> Iterators.transform(locatablesPerShard(locatablesIterator, shardsIterator, sequenceDictionary, maxLocatableLength), new Function<Tuple2<I,Iterable<L>>, T>() {
+                (FlatMapFunction2<Iterator<L>, Iterator<I>, T>) (locatablesIterator, shardsIterator) -> Iterators.transform(locatablesPerShard(locatablesIterator, shardsIterator, sequenceDictionary, maxLocatableLength), new com.google.common.base.Function<Tuple2<I,Iterable<L>>, T>() {
                     @Nullable
                     @Override
                     public T apply(@Nullable Tuple2<I, Iterable<L>> input) {
@@ -318,6 +474,19 @@ public class SparkSharder {
         return extents;
     }
 
+    /**
+     * Returns a partitioner that would split the input in a number of roughly equaly sized shards.
+     * <p>
+     *     This partitioner can only be used on key objects that implement {@link Locatable}.
+     * </p>
+     * @param numberOfPartitions number of partitions.
+     * @throws IllegalArgumentException if {@code numberOfPartitions} is 0 or a negative.
+     * @return never {@code null}.
+     */
+    public <L extends Locatable> ShardPartitioner<L> partitioner(final Class<L> clazz, final int numberOfPartitions) {
+        return new ShardPartitioner<>(clazz, shardList, numberOfPartitions);
+    }
+
     private static void addPartitionReadExtent(List<PartitionLocatable<SimpleInterval>> extents, int partitionIndex, String contig, int start, int end) {
         SimpleInterval extent = new SimpleInterval(contig, start, end);
         extents.add(new PartitionLocatable<>(partitionIndex, extent));
@@ -328,6 +497,8 @@ public class SparkSharder {
         ClassTag<T> tag = ClassTag$.MODULE$.apply(cls);
         return new JavaRDD<>(coalescedRdd, tag);
     }
+
+
 
     private static class KeyPartitioner extends Partitioner {
 
@@ -356,7 +527,6 @@ public class SparkSharder {
 
         private final int partitionIndex;
         private final L interval;
-
 
         public PartitionLocatable(int partitionIndex, L interval) {
             this.partitionIndex = partitionIndex;

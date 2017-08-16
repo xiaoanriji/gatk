@@ -26,8 +26,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 
 public class SVContextUnitTest extends GATKBaseTest {
@@ -82,6 +85,7 @@ public class SVContextUnitTest extends GATKBaseTest {
      */
     @Test(dataProvider="validVariantContexts", dependsOnMethods = {"testCreate"}, groups = "sv")
     public void testInsertedSequence(final VariantContext vc, @SuppressWarnings("unused") final ReferenceMultiSource reference) {
+
         final SVContext svc = SVContext.of(vc);
         final byte[] actual = svc.getInsertedSequence();
         Assert.assertEquals(actual == null ? "<null>" : new String(actual), vc.getAttributeAsString(GATKSVVCFConstants.INSERTED_SEQUENCE, "<null>"));
@@ -98,7 +102,7 @@ public class SVContextUnitTest extends GATKBaseTest {
     }
 
     /**
-     * Tests {@link SVContext#composeHaplotypeBasedOnReference(int, int, ReferenceMultiSource)}} when used
+     * Tests {@link SVContext#composeHaplotypesBasedOnReference(int, ReferenceMultiSource, List)}} when used
      * to obtain the reference haplotype.
      * @param vc input variant context.
      */
@@ -106,17 +110,16 @@ public class SVContextUnitTest extends GATKBaseTest {
     public void testComposeReferenceHaplotype(final VariantContext vc, @SuppressWarnings("unused") final ReferenceMultiSource reference) throws IOException {
         final SVContext svc = SVContext.of(vc);
         final int paddingSize = 10;
-        final Haplotype refHaplotype = svc.composeHaplotypeBasedOnReference(0, paddingSize, reference);
+        final SVHaplotype refHaplotype = svc.composeHaplotypesBasedOnReference(paddingSize, reference, Collections.emptyList()).get(0);
         Assert.assertNotNull(refHaplotype);
-        Assert.assertTrue(refHaplotype.isReference());
         final SimpleInterval expectedInterval = new SimpleInterval(vc.getContig(), vc.getStart() + 1 - paddingSize, vc.getEnd() + paddingSize);
-        Assert.assertEquals(new SimpleInterval(refHaplotype.getGenomeLocation()), expectedInterval, svc.getContig() + ":" + svc.getStart() + " " + svc.getStructuralVariantType() + " " + svc.getStructuralVariantLength());
+        Assert.assertEquals(refHaplotype.getReferenceSpan(), expectedInterval, svc.getContig() + ":" + svc.getStart() + " " + svc.getStructuralVariantType() + " " + svc.getStructuralVariantLength());
         Assert.assertEquals(refHaplotype.getBases(), reference.getReferenceBases(expectedInterval).getBases());
         Assert.assertEquals(refHaplotype.getCigar(), new Cigar(Collections.singletonList(new CigarElement(expectedInterval.size(), CigarOperator.M))));
     }
 
     /**
-     * Tests {@link SVContext#composeHaplotypeBasedOnReference(int, int, ReferenceMultiSource)}} when used
+     * Tests {@link SVContext#composeHaplotypesBasedOnReference(int, ReferenceMultiSource, List)}} when used
      * to obtain the reference alternative haplotype.
      * @param vc input variant context.
      */
@@ -127,11 +130,10 @@ public class SVContextUnitTest extends GATKBaseTest {
             throw new SkipException("unsupported type; skipped for now");
         }
         final int paddingSize = 10;
-        final Haplotype altHaplotype = svc.composeHaplotypeBasedOnReference(1, paddingSize, reference);
+        final SVHaplotype altHaplotype = svc.composeHaplotypesBasedOnReference(paddingSize, reference, Collections.emptyList()).get(1);
         Assert.assertNotNull(altHaplotype);
-        Assert.assertFalse(altHaplotype.isReference());
         final SimpleInterval expectedInterval = new SimpleInterval(vc.getContig(), vc.getStart() + 1 - paddingSize, vc.getEnd() + paddingSize);
-        Assert.assertEquals(new SimpleInterval(altHaplotype.getGenomeLocation()), expectedInterval, svc.getContig() + ":" + svc.getStart() + " " + svc.getStructuralVariantType() + " " + svc.getStructuralVariantLength());
+        Assert.assertEquals(new SimpleInterval(altHaplotype.getReferenceSpan()), expectedInterval, svc.getContig() + ":" + svc.getStart() + " " + svc.getStructuralVariantType() + " " + svc.getStructuralVariantLength());
         final byte[] expectedBases;
         final Cigar expectedCigar;
         if (svc.getStructuralVariantType() == StructuralVariantType.INS) {
@@ -164,8 +166,8 @@ public class SVContextUnitTest extends GATKBaseTest {
     }
 
     private void testGetBreakPoints(final VariantContext vc, final ReferenceMultiSource reference, final int paddingSize) throws IOException {
-        final SVContext svc = SVContext.of(vc);
-        if (svc.getStructuralVariantType() != StructuralVariantType.INS && svc.getStructuralVariantType() != StructuralVariantType.DEL) {
+       final SVContext svc = SVContext.of(vc);
+       if (svc.getStructuralVariantType() != StructuralVariantType.INS && svc.getStructuralVariantType() != StructuralVariantType.DEL) {
             throw new SkipException("unsupported type; skipped for now");
         }
         final List<SimpleInterval> breakPoints = svc.getBreakPointIntervals(paddingSize, reference.getReferenceSequenceDictionary(null), false);
@@ -209,6 +211,29 @@ public class SVContextUnitTest extends GATKBaseTest {
         try { testComposeAlternativeHaplotype(vc, reference); } catch (final SkipException ex) {}
         try { testComposeReferenceHaplotype(vc, reference); } catch (final SkipException ex) {}
     }
+
+    @Test(dependsOnMethods = {"testOf"})
+    public void testUniqueID() {
+        final Object[][] validVariantContexts = validVariantContexts();
+        final List<String> ids = Stream.of(validVariantContexts)
+                .map(oo -> (VariantContext) oo[0])
+                .map(SVContext::of)
+                .map(SVContext::getUniqueID)
+                .collect(Collectors.toList());
+        final List<String> secondTake = Stream.of(validVariantContexts)
+                .map(oo -> (VariantContext) oo[0])
+                .map(SVContext::of)
+                .map(SVContext::getUniqueID)
+                .collect(Collectors.toList());
+        for(final String id : ids) {
+            Assert.assertNotNull(id);
+        }
+        Assert.assertEquals(ids, secondTake);
+        final Set<String> idSet = new HashSet<>(ids.size());
+        for (final String id : ids) {
+            Assert.assertTrue(idSet.add(id), "duplicated id: " + id);
+        }
+     }
 
     @DataProvider(name="validVariantContexts")
     public Object[][] validVariantContexts(){
