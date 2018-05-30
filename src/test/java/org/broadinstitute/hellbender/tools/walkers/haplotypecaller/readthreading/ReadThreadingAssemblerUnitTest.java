@@ -4,11 +4,11 @@ import htsjdk.samtools.Cigar;
 import htsjdk.samtools.CigarElement;
 import htsjdk.samtools.CigarOperator;
 import htsjdk.samtools.SAMFileHeader;
-import htsjdk.samtools.reference.IndexedFastaSequenceFile;
+import htsjdk.samtools.reference.ReferenceSequenceFile;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.variantcontext.VariantContextBuilder;
-import java.nio.file.Paths;
+import org.broadinstitute.hellbender.GATKBaseTest;
 import org.broadinstitute.hellbender.engine.AssemblyRegion;
 import org.broadinstitute.hellbender.tools.walkers.haplotypecaller.AssemblyResultSet;
 import org.broadinstitute.hellbender.tools.walkers.haplotypecaller.graphs.KBestHaplotype;
@@ -22,7 +22,6 @@ import org.broadinstitute.hellbender.utils.haplotype.Haplotype;
 import org.broadinstitute.hellbender.utils.read.ArtificialReadUtils;
 import org.broadinstitute.hellbender.utils.read.GATKRead;
 import org.broadinstitute.hellbender.utils.smithwaterman.SmithWatermanJavaAligner;
-import org.broadinstitute.hellbender.GATKBaseTest;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.DataProvider;
@@ -30,18 +29,19 @@ import org.testng.annotations.Test;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.nio.file.Paths;
 import java.util.*;
 
 public final class ReadThreadingAssemblerUnitTest extends GATKBaseTest {
 
     private static final boolean DEBUG = false;
 
-    private IndexedFastaSequenceFile seq;
+    private ReferenceSequenceFile seq;
     private SAMFileHeader header;
 
     @BeforeClass
     public void setup() throws FileNotFoundException {
-        seq = new CachingIndexedFastaSequenceFile(Paths.get(hg19_chr1_1M_Reference));
+        seq = CachingIndexedFastaSequenceFile.checkAndCreate(Paths.get(hg19_chr1_1M_Reference));
         header = ArtificialReadUtils.createArtificialSamHeader(seq.getSequenceDictionary());
     }
 

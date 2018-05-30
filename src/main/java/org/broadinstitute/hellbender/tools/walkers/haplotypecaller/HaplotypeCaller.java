@@ -2,7 +2,6 @@ package org.broadinstitute.hellbender.tools.walkers.haplotypecaller;
 
 import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.samtools.reference.ReferenceSequenceFile;
-import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.variantcontext.writer.VariantContextWriter;
 import org.broadinstitute.barclay.argparser.Argument;
 import org.broadinstitute.barclay.argparser.ArgumentCollection;
@@ -14,18 +13,14 @@ import org.broadinstitute.hellbender.cmdline.argumentcollections.ReferenceInputA
 import org.broadinstitute.hellbender.cmdline.programgroups.ShortVariantDiscoveryProgramGroup;
 import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.engine.filters.ReadFilter;
-import org.broadinstitute.hellbender.exceptions.UserException;
-import org.broadinstitute.hellbender.tools.walkers.annotator.*;
+import org.broadinstitute.hellbender.tools.walkers.annotator.Annotation;
+import org.broadinstitute.hellbender.tools.walkers.annotator.VariantAnnotatorEngine;
 import org.broadinstitute.hellbender.utils.fasta.CachingIndexedFastaSequenceFile;
 import org.broadinstitute.hellbender.utils.io.IOUtils;
 
-import java.io.FileNotFoundException;
-import java.util.*;
-import java.util.ArrayList;
-import java.util.List;
-import org.broadinstitute.hellbender.utils.io.IOUtils;
-import org.broadinstitute.hellbender.utils.variant.HomoSapiensConstants;
 import java.nio.file.Path;
+import java.util.Collection;
+import java.util.List;
 
 
 /**
@@ -233,14 +228,8 @@ public final class HaplotypeCaller extends AssemblyRegionWalker {
     }
 
     private static CachingIndexedFastaSequenceFile getReferenceReader(ReferenceInputArgumentCollection referenceArguments) {
-        final CachingIndexedFastaSequenceFile referenceReader;
         final Path reference = IOUtils.getPath(referenceArguments.getReferenceFileName());
-        try {
-            referenceReader = new CachingIndexedFastaSequenceFile(reference);
-        } catch (FileNotFoundException e) {
-            throw new UserException.CouldNotReadInputFile(reference, e);
-        }
-        return referenceReader;
+        return CachingIndexedFastaSequenceFile.checkAndCreate(reference);
     }
 
     @Override
