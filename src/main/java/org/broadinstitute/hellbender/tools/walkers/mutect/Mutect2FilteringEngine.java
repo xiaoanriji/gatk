@@ -80,6 +80,14 @@ public class Mutect2FilteringEngine {
         }
     }
 
+    private void applyDiscordantMatesFilter(final VariantContext vc, final VariantContextBuilder vcb) {
+        if (vc.hasAttribute("P_VAL_OA_TAG")) {
+            if (vc.getAttributeAsDouble("P_VAL_OA_TAG", 1) < .05) {
+                vcb.filter("DISCORDANT_MATES_FILTER");
+            }
+        }
+    }
+
     private void applySTRFilter(final VariantContext vc, final VariantContextBuilder vcb) {
         // STR contractions, such as ACTACTACT -> ACTACT, are overwhelmingly false positives so we hard filter by default
         if (vc.isIndel()) {
@@ -307,6 +315,7 @@ public class Mutect2FilteringEngine {
         applyClusteredEventFilter(vc, vcb);
         applyDuplicatedAltReadFilter(MTFAC, vc, vcb);
         applyTriallelicFilter(vc, vcb);
+        applyDiscordantMatesFilter(vc, vcb);
         applyPanelOfNormalsFilter(MTFAC, vc, vcb);
         applyGermlineVariantFilter(MTFAC, vc, vcb);
         applyArtifactInNormalFilter(MTFAC, vc, vcb);
