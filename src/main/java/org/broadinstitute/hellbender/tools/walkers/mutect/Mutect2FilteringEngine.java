@@ -89,6 +89,17 @@ public class Mutect2FilteringEngine {
         }
     }
 
+    private void applyAFFilter(final VariantContext vc, final VariantContextBuilder vcb) {
+        Genotype tumorGenotype = vc.getGenotype(tumorSample);
+        if (vc.isBiallelic()) {
+            double af = Double.parseDouble((String) tumorGenotype.getAnyAttribute(GATKVCFConstants.ALLELE_FRACTION_KEY));
+            if (af < .008) {
+                vcb.filter(GATKVCFConstants.LOW_ALLELE_FRACTION_NAME);
+            }
+        }
+
+    }
+
     private void applySTRFilter(final VariantContext vc, final VariantContextBuilder vcb) {
         // STR contractions, such as ACTACTACT -> ACTACT, are overwhelmingly false positives so we hard filter by default
         if (vc.isIndel()) {
@@ -317,6 +328,7 @@ public class Mutect2FilteringEngine {
         applyDuplicatedAltReadFilter(MTFAC, vc, vcb);
         applyTriallelicFilter(vc, vcb);
         applyDiscordantMatesFilter(vc, vcb);
+        applyAFFilter(vc, vcb);
         applyPanelOfNormalsFilter(MTFAC, vc, vcb);
         applyGermlineVariantFilter(MTFAC, vc, vcb);
         applyArtifactInNormalFilter(MTFAC, vc, vcb);
