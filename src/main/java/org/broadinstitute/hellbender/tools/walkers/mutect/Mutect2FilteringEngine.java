@@ -6,6 +6,7 @@ import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.variantcontext.VariantContextBuilder;
 import htsjdk.variant.vcf.VCFConstants;
 import org.apache.commons.math3.distribution.BinomialDistribution;
+import org.broadinstitute.hellbender.engine.VariantWalker;
 import org.broadinstitute.hellbender.tools.walkers.annotator.*;
 import org.broadinstitute.hellbender.tools.walkers.contamination.ContaminationRecord;
 import org.broadinstitute.hellbender.tools.walkers.contamination.MinorAlleleFractionRecord;
@@ -97,7 +98,15 @@ public class Mutect2FilteringEngine {
                 vcb.filter(GATKVCFConstants.LOW_ALLELE_FRACTION_NAME);
             }
         }
+    }
 
+    private void applyTLODDFilter(final VariantContext vc, final VariantContextBuilder vcb) {
+        Double TLOD = vc.getAttributeAsDouble("TLOD", 1);
+        Double depth = vc.getAttributeAsDouble("DP", 1);
+        Double TLODD = TLOD/depth;
+        if (TLODD < .005) {
+            vcb.filter(GATKVCFConstants.LOW_TLODD_NAME);
+        }
     }
 
     private void applySTRFilter(final VariantContext vc, final VariantContextBuilder vcb) {
@@ -327,8 +336,9 @@ public class Mutect2FilteringEngine {
         applyClusteredEventFilter(vc, vcb);
         applyDuplicatedAltReadFilter(MTFAC, vc, vcb);
         applyTriallelicFilter(vc, vcb);
-        applyDiscordantMatesFilter(vc, vcb);
+        //applyDiscordantMatesFilter(vc, vcb);
         applyAFFilter(vc, vcb);
+        applyTLODDFilter(vc, vcb);
         applyPanelOfNormalsFilter(MTFAC, vc, vcb);
         applyGermlineVariantFilter(MTFAC, vc, vcb);
         applyArtifactInNormalFilter(MTFAC, vc, vcb);
