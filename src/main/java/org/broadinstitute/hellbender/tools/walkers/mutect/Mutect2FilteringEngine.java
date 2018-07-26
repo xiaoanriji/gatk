@@ -350,7 +350,7 @@ public class Mutect2FilteringEngine {
         applyBaseQualityFilter(MTFAC, vc, vcb);
         applyMappingQualityFilter(MTFAC, vc, vcb);
         applyMedianFragmentLengthDifferenceFilter(MTFAC, vc, vcb);
-        applyReadPositionFilter(MTFAC, vc, vcb);
+        //applyReadPositionFilter(MTFAC, vc, vcb);
     }
 
     private int[] getIntArrayTumorField(final VariantContext vc, final String key) {
