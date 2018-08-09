@@ -1,4 +1,4 @@
-package org.broadinstitute.hellbender.tools.walkers.readorientation;
+package org.broadinstitute.hellbender.utils;
 
 import org.broadinstitute.hellbender.utils.Dirichlet;
 import org.broadinstitute.hellbender.utils.Utils;

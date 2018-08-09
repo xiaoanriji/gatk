@@ -2,7 +2,7 @@ package org.broadinstitute.hellbender.tools.walkers.mutect;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.math3.util.FastMath;
-import org.broadinstitute.hellbender.tools.walkers.readorientation.BetaDistributionShape;
+import org.broadinstitute.hellbender.utils.BetaDistributionShape;
 import org.broadinstitute.hellbender.utils.Dirichlet;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.Utils;
