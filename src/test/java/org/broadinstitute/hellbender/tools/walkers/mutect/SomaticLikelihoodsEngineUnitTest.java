@@ -9,49 +9,48 @@ import org.broadinstitute.hellbender.utils.IndexRange;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.GATKBaseTest;
 import org.testng.Assert;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 /**
  * Created by David Benjamin on 3/9/17.
  */
 public class SomaticLikelihoodsEngineUnitTest extends GATKBaseTest {
-    @Test
-    public void testAlleleFractionsPosterior() {
 
-        //likelihoods completely favor allele 0 over allele 1 for every read, so
-        // we should get no counts for allele 1
-        final Dirichlet prior1 = Dirichlet.of(1, 1);
-        final RealMatrix mat1 = new Array2DRowRealMatrix(new double[][] {{0, 0, 0, 0}, {-10, -10, -10, -10}});
-        final Dirichlet posterior1 = SomaticLikelihoodsEngine.alleleFractionsPosterior(mat1, prior1);
-        final double[] expectedCounts1 = new double[] {4, 0};
+    @DataProvider(name="afPosterior")
+    public Object[][] afPosterior() {
+        // Dirichlet prior, log 10 likelihoods matrix, expected counts
+        return new Object[][]{
+                //likelihoods completely favor allele 0 over allele 1 for every read, so we should get no counts for allele 1
+                { Dirichlet.of(1, 1),
+                        new Array2DRowRealMatrix(new double[][] {{0, 0, 0, 0}, {-10, -10, -10, -10}}),
+                        new double[] {4, 0} },
+                //extremely strong prior, extremely weak likelihoods
+                { Dirichlet.of(1e8, 1),
+                        new Array2DRowRealMatrix(new double[][] {{0, 0, 0, 0}, {0, 0, 0, 0}}),
+                        new double[] {4, 0} },
+                // extremely weak prior, extremely strong likelihoods
+                { Dirichlet.of(1e-6, 1e-6),
+                        new Array2DRowRealMatrix(new double[][] {{0, 0, 0, -10}, {-10, -10, -10, 0}}),
+                        new double[] {3, 1}},
+                // non-obvious expected counts, but we can still test convergence
+                { Dirichlet.of(0.2, 1.7),
+                        new Array2DRowRealMatrix(new double[][] {{0.1, 5.2, 0.5, 0.2}, {2.6, 0.6, 0.5, 0.4}}),
+                        null},
+        };
+    }
+    @Test(dataProvider = "afPosterior")
+    public void testAlleleFractionsPosterior(final Dirichlet prior, final RealMatrix matrix, final double[] expectedCounts) {
+        final Dirichlet posterior = SomaticLikelihoodsEngine.alleleFractionsPosterior(matrix, prior);
 
-        final Dirichlet expectedPosterior1 = prior1.addCounts(expectedCounts1);
-        Assert.assertEquals(posterior1.distance1(expectedPosterior1),0, 1.0e-6);
-
-        //prior is extremely strong and outweighs ambiguous likelihoods
-        final Dirichlet prior2 = Dirichlet.of(1e8, 1);
-        final RealMatrix mat2 = new Array2DRowRealMatrix(new double[][] {{0, 0, 0, 0}, {0, 0, 0, 0}});
-        final Dirichlet posterior2 = SomaticLikelihoodsEngine.alleleFractionsPosterior(mat2, prior2);
-        final double[] expectedCounts2 = new double[] {4, 0};
-
-        final Dirichlet expectedPosterior2 = prior2.addCounts(expectedCounts2);
-        Assert.assertEquals(posterior2.distance1(expectedPosterior2),0, 1.0e-6);
-
-        //prior is extremely weak and likelihoods speak for themselves
-        final Dirichlet prior3 = Dirichlet.of(1e-6, 1e-6);
-        final RealMatrix mat3 = new Array2DRowRealMatrix(new double[][] {{0, 0, 0, -10}, {-10, -10, -10, 0}});
-        final Dirichlet posterior3 = SomaticLikelihoodsEngine.alleleFractionsPosterior(mat3, prior3);
-        final double[] expectedCounts3 = new double[] {3, 1};
-
-        final Dirichlet expectedPosterior3 = prior3.addCounts(expectedCounts3);
-        Assert.assertEquals(posterior3.distance1(expectedPosterior3),0, 1.0e-6);
+        if (expectedCounts != null) {
+            final Dirichlet expectedPosterior = prior.addCounts(expectedCounts);
+            Assert.assertEquals(posterior.distance1(expectedPosterior), 0, 1.0e-6);
+        }
 
         // test convergence i.e. posterior = prior + effective counts
-        final Dirichlet prior4 = Dirichlet.of(0.2, 1.7);
-        final RealMatrix mat4 = new Array2DRowRealMatrix(new double[][] {{0.1, 5.2, 0.5, 0.2}, {2.6, 0.6, 0.5, 0.4}});
-        final Dirichlet posterior4 = SomaticLikelihoodsEngine.alleleFractionsPosterior(mat4, prior4);
-        final double[] effectiveCounts = SomaticLikelihoodsEngine.getEffectiveCounts(mat4, posterior4);
-        Assert.assertEquals(prior4.addCounts(effectiveCounts).distance1(posterior4), 0, 1.0e-3);
+        final double[] effectiveCounts = SomaticLikelihoodsEngine.getEffectiveCounts(matrix, posterior);
+        Assert.assertEquals(prior.addCounts(effectiveCounts).distance1(posterior), 0, 1.0e-3);
     }
 
     @Test
