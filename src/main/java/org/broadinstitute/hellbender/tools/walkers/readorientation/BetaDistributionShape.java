@@ -1,27 +1,18 @@
 package org.broadinstitute.hellbender.tools.walkers.readorientation;
 
+import org.broadinstitute.hellbender.utils.Dirichlet;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
-public class BetaDistributionShape {
-    private double alpha;
-    private double beta;
+public class BetaDistributionShape extends Dirichlet {
 
     public BetaDistributionShape(final double alpha, final double beta){
-        ParamUtils.isPositive(alpha, "alpha must be greater than 0 but got " + alpha);
-        Utils.validateArg(beta > 0, "beta must be greater than 0 but got " + beta);
-
-        this.alpha = alpha;
-        this.beta = beta;
+        super(alpha, beta);
     }
 
-    public double getAlpha() {
-        return alpha;
-    }
+    public double getAlpha() { return alpha[0]; }
 
     public double getBeta() {
-        return beta;
+        return alpha[1];
     }
-
-    public double[] asDirichlet() { return new double[] {alpha, beta}; }
 }
