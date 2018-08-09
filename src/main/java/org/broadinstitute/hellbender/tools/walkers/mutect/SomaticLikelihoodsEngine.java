@@ -20,7 +20,8 @@ public class SomaticLikelihoodsEngine {
      * @param log10Likelihoods matrix of alleles x reads
      * @param prior
      */
-    public static Dirichlet alleleFractionsPosterior(final RealMatrix log10Likelihoods, final Dirichlet prior) {
+    @VisibleForTesting
+    static Dirichlet alleleFractionsPosterior(final RealMatrix log10Likelihoods, final Dirichlet prior) {
         final int numberOfAlleles = log10Likelihoods.getRowDimension();
         Utils.validateArg(numberOfAlleles == prior.dimension(), "Must have one pseudocount per allele.");
 
@@ -37,12 +38,6 @@ public class SomaticLikelihoodsEngine {
 
         return posterior;
     }
-
-    //same with flat prior
-    public static Dirichlet alleleFractionsPosterior(final RealMatrix log10Likelihoods) {
-        return alleleFractionsPosterior(log10Likelihoods, Dirichlet.flat(log10Likelihoods.getRowDimension()));
-    }
-
 
     /**
      * Given data log likelihoods and a Dirichlet prior for a categorical distribution, obtain the array of total
@@ -63,7 +58,8 @@ public class SomaticLikelihoodsEngine {
      * @param log10Likelihoods matrix of alleles x reads
      * @param prior Dirichlet prior on allele fractions
      */
-    public static double log10Evidence(final RealMatrix log10Likelihoods, final Dirichlet prior) {
+    @VisibleForTesting
+    static double log10Evidence(final RealMatrix log10Likelihoods, final Dirichlet prior) {
         Utils.validateArg(log10Likelihoods.getRowDimension() == prior.dimension(), "Must have one pseudocount per allele.");
         final Dirichlet posterior = alleleFractionsPosterior(log10Likelihoods, prior);
 

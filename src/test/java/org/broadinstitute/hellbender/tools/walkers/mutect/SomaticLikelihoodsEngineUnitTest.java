@@ -12,6 +12,8 @@ import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
+import java.util.stream.IntStream;
+
 /**
  * Created by David Benjamin on 3/9/17.
  */
@@ -19,28 +21,33 @@ public class SomaticLikelihoodsEngineUnitTest extends GATKBaseTest {
 
     @DataProvider(name="afPosterior")
     public Object[][] afPosterior() {
-        // Dirichlet prior, log 10 likelihoods matrix, expected counts
+        // Dirichlet prior, log 10 likelihoods matrix, expected counts, whether to test log 10 evidence correction
         return new Object[][]{
                 //likelihoods completely favor allele 0 over allele 1 for every read, so we should get no counts for allele 1
                 { Dirichlet.of(1, 1),
                         new Array2DRowRealMatrix(new double[][] {{0, 0, 0, 0}, {-10, -10, -10, -10}}),
-                        new double[] {4, 0} },
+                        new double[] {4, 0},
+                        true},
                 //extremely strong prior, extremely weak likelihoods
                 { Dirichlet.of(1e8, 1),
                         new Array2DRowRealMatrix(new double[][] {{0, 0, 0, 0}, {0, 0, 0, 0}}),
-                        new double[] {4, 0} },
+                        new double[] {4, 0},
+                        false},
                 // extremely weak prior, extremely strong likelihoods
                 { Dirichlet.of(1e-6, 1e-6),
                         new Array2DRowRealMatrix(new double[][] {{0, 0, 0, -10}, {-10, -10, -10, 0}}),
-                        new double[] {3, 1}},
+                        new double[] {3, 1},
+                        true},
                 // non-obvious expected counts, but we can still test convergence
                 { Dirichlet.of(0.2, 1.7),
                         new Array2DRowRealMatrix(new double[][] {{0.1, 5.2, 0.5, 0.2}, {2.6, 0.6, 0.5, 0.4}}),
-                        null},
+                        null,
+                        true},
         };
     }
+
     @Test(dataProvider = "afPosterior")
-    public void testAlleleFractionsPosterior(final Dirichlet prior, final RealMatrix matrix, final double[] expectedCounts) {
+    public void testAlleleFractionsPosterior(final Dirichlet prior, final RealMatrix matrix, final double[] expectedCounts, final boolean testEvidenceCorrection) {
         final Dirichlet posterior = SomaticLikelihoodsEngine.alleleFractionsPosterior(matrix, prior);
 
         if (expectedCounts != null) {
@@ -51,6 +58,23 @@ public class SomaticLikelihoodsEngineUnitTest extends GATKBaseTest {
         // test convergence i.e. posterior = prior + effective counts
         final double[] effectiveCounts = SomaticLikelihoodsEngine.getEffectiveCounts(matrix, posterior);
         Assert.assertEquals(prior.addCounts(effectiveCounts).distance1(posterior), 0, 1.0e-3);
+    }
+
+    @Test(dataProvider = "afPosterior")
+    public void testLog10EvidenceCorrection(final Dirichlet prior, final RealMatrix log10Likelihoods, final double[] expectedCounts, final boolean testEvidenceCorrection) {
+        if (!testEvidenceCorrection) {
+            return;
+        }
+        final double evidence = SomaticLikelihoodsEngine.log10Evidence(log10Likelihoods, prior);
+        final Dirichlet posterior = SomaticLikelihoodsEngine.alleleFractionsPosterior(log10Likelihoods, prior);
+        final double[] counts = SomaticLikelihoodsEngine.getEffectiveCounts(log10Likelihoods, posterior);
+
+        final Dirichlet otherPrior = Dirichlet.of(IntStream.range(0, prior.dimension()).mapToDouble(n -> n + 3).toArray());
+        final double otherEvidence = SomaticLikelihoodsEngine.log10Evidence(log10Likelihoods, otherPrior);
+
+        final double correction = SomaticLikelihoodsEngine.log10OddsCorrection(otherPrior, prior, counts);
+
+        Assert.assertEquals(evidence + correction, otherEvidence, 0.1);
     }
 
     @Test
