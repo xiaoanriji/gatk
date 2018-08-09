@@ -5,7 +5,10 @@ import htsjdk.variant.variantcontext.Genotype;
 import htsjdk.variant.variantcontext.VariantContext;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.math3.util.FastMath;
 import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.tools.walkers.readorientation.BetaDistributionShape;
+import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 import org.broadinstitute.hellbender.utils.tsv.DataLine;
@@ -16,24 +19,25 @@ import org.broadinstitute.hellbender.utils.variant.GATKVCFConstants;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Stores the results of the first pass of {@link FilterMutectCalls}, a purely online step in which each variant is
  * not "aware" of other variants, and learns various global properties necessary for a more refined second step.
  */
 public class FilteringFirstPass {
-    final List<FilterResult> filterResults;
-    final Map<String, ImmutablePair<String, Integer>> filteredPhasedCalls;
-    final Map<String, FilterStats> filterStats;
+    final List<FilterResult> filterResults = new ArrayList<>();
+    final List<ImmutablePair<double[], double[]>> unfilteredTumorLodsAndCounts = new ArrayList<>();
+    final Map<String, ImmutablePair<String, Integer>> filteredPhasedCalls = new HashMap<>();
+    final Map<String, FilterStats> filterStats = new HashMap<>();
+    AlleleFractionClustering afClustering = null;
     final String tumorSample;
-    boolean readyForSecondPass;
+    final int callableSites;    //TODO: emit this in M2 and grab from vcf just like tumor sample
+    boolean readyForSecondPass = false;
 
-    public FilteringFirstPass(final String tumorSample) {
-        filterResults = new ArrayList<>();
-        filteredPhasedCalls = new HashMap<>();
-        filterStats = new HashMap<>();
-        readyForSecondPass = false;
+    public FilteringFirstPass(final String tumorSample, final int callableSites) {
         this.tumorSample = tumorSample;
+        this.callableSites = callableSites;
     }
 
     public boolean isReadyForSecondPass() { return readyForSecondPass; }
@@ -68,22 +72,32 @@ public class FilteringFirstPass {
         filterResults.add(filterResult);
         final Genotype tumorGenotype = vc.getGenotype(tumorSample);
 
-        if (!filterResult.getFilters().isEmpty() && hasPhaseInfo(tumorGenotype)) {
+        final Set<String> appliedFilters = filterResult.getFilters();
+        if (!appliedFilters.isEmpty() && hasPhaseInfo(tumorGenotype)) {
             final String pgt = (String) tumorGenotype.getExtendedAttribute(GATKVCFConstants.HAPLOTYPE_CALLER_PHASING_GT_KEY, "");
             final String pid = (String) tumorGenotype.getExtendedAttribute(GATKVCFConstants.HAPLOTYPE_CALLER_PHASING_ID_KEY, "");
             final int position = vc.getStart();
             filteredPhasedCalls.put(pid, new ImmutablePair<>(pgt, position));
         }
+
+        // if a variant has no artifact filter applied (it could have a TLOD filter) we use it for the AF clustering model
+        if (appliedFilters.isEmpty() || (appliedFilters.size() == 1 && appliedFilters.contains(GATKVCFConstants.TUMOR_LOD_FILTER_NAME))) {
+            final double[] tumorLods = Mutect2FilteringEngine.getDoubleArrayAttribute(vc, GATKVCFConstants.TUMOR_LOD_KEY);
+            final double[] tumorADs = Arrays.stream(tumorGenotype.getAD()).mapToDouble(n->n).toArray();
+            unfilteredTumorLodsAndCounts.add(new ImmutablePair<>(tumorLods, tumorADs));
+        }
     }
 
-    public void learnModelForSecondPass(final double requestedFPR){
+    public void learnModelForSecondPass(final M2FiltersArgumentCollection MTFAC) {
         final double[] readOrientationPosteriors = getFilterResults().stream()
                 .filter(r -> r.getFilters().isEmpty())
                 .mapToDouble(r -> r.getReadOrientationPosterior())
                 .toArray();
 
-        final FilterStats readOrientationFilterStats = calculateThresholdForReadOrientationFilter(readOrientationPosteriors, requestedFPR);
+        final FilterStats readOrientationFilterStats = calculateThresholdForReadOrientationFilter(readOrientationPosteriors, MTFAC.maxFalsePositiveRate);
         filterStats.put(GATKVCFConstants.READ_ORIENTATION_ARTIFACT_FILTER_NAME, readOrientationFilterStats);
+
+        afClustering = new AlleleFractionClustering(unfilteredTumorLodsAndCounts, callableSites, MTFAC);
         readyForSecondPass = true;
     }
 
@@ -133,6 +147,63 @@ public class FilteringFirstPass {
 
     public List<FilterResult> getFilterResults() {
         return filterResults;
+    }
+
+    public static class AlleleFractionClustering {
+        private BetaDistributionShape highConfidenceDistribution;
+        private BetaDistributionShape lowConfidenceDistribution;
+        private double log10HighConfidencePrior;
+        private double log10LowConfidencePrior;
+        private double log10NothingPrior;
+
+        public AlleleFractionClustering(final List<ImmutablePair<double[], double[]>> tumorLodsAndCounts,
+                                        final int callableSites, final M2FiltersArgumentCollection MTFAC) {
+            Utils.validateArg(MTFAC.highConfidenceLod >= MTFAC.lowConfidenceLod, "High confidence threshold can't be smaller than low-confidence threshold.");
+            final List<double[]> highConfidenceCounts = tumorLodsAndCounts.stream()
+                    .filter(pair -> MathUtils.arrayMax(pair.getLeft()) > MTFAC.highConfidenceLod)
+                    .map(pair -> pair.getRight())
+                    .collect(Collectors.toList());
+            final List<double[]> lowConfidenceCounts = tumorLodsAndCounts.stream()
+                                                    .filter(pair -> MathUtils.arrayMax(pair.getLeft()) > MTFAC.lowConfidenceLod && MathUtils.arrayMax(pair.getLeft()) <= MTFAC.highConfidenceLod)
+                                                    .map(pair -> pair.getRight())
+                                                    .collect(Collectors.toList());
+            highConfidenceDistribution = fitShape(highConfidenceCounts);
+            log10HighConfidencePrior = FastMath.log10((double) highConfidenceCounts.size() / callableSites);
+            lowConfidenceDistribution = fitShape(lowConfidenceCounts);
+            log10LowConfidencePrior = FastMath.log10((double) lowConfidenceCounts.size() / callableSites);
+            log10NothingPrior = FastMath.log10(1 - log10HighConfidencePrior - log10LowConfidencePrior);
+
+            // Now do an E step with fractional assignments to nothing, low-confidence, high confidence
+            final List<double[]> responsibilities = tumorLodsAndCounts.stream().map(pair -> {
+                final double tumorLog10Odds = pair.getLeft()[0];
+                final double refCount = pair.getRight()[0];
+                final double altCount = pair.getRight()[1];
+
+                final double lowConfidenceLog10OddsCorrection = SomaticLikelihoodsEngine.log10OddsCorrection(
+                        lowConfidenceDistribution.asDirichlet(), new double[] {1,1}, new double[] {altCount, refCount});
+                final double highConfidenceLog10OddsCorrection = SomaticLikelihoodsEngine.log10OddsCorrection(
+                        highConfidenceDistribution.asDirichlet(), new double[] {1,1}, new double[] {altCount, refCount});
+
+                final double[] unweightedLog10Responsibilities = new double[] {log10NothingPrior,
+                        log10LowConfidencePrior + tumorLog10Odds + lowConfidenceLog10OddsCorrection,
+                        log10HighConfidencePrior + tumorLog10Odds + highConfidenceLog10OddsCorrection};
+
+                return MathUtils.normalizeFromLog10ToLinearSpace(unweightedLog10Responsibilities);
+                }).collect(Collectors.toList());
+
+
+            log10LowConfidencePrior = FastMath.log10(responsibilities.stream().mapToDouble(r -> r[1]).sum() / callableSites);
+            log10HighConfidencePrior = FastMath.log10(responsibilities.stream().mapToDouble(r -> r[2]).sum() / callableSites);
+            log10NothingPrior = FastMath.log10(responsibilities.stream().mapToDouble(r -> r[0]).sum() / callableSites);
+
+            //todo write M step for beta shapes by using fit shape w/ responsibilities
+            // TODO wrap this in an iteration
+
+        }
+
+        private BetaDistributionShape fitShape(final List<double[]> counts) {
+            //TODO fill this in
+        }
     }
 
     public static class FilterStats {

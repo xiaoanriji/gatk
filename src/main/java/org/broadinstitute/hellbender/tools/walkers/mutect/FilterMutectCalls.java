@@ -101,11 +101,14 @@ public final class FilterMutectCalls extends TwoPassVariantWalker {
         vcfWriter.writeHeader(vcfHeader);
 
         final String tumorSample = getTumorSampleName();
+
+        // TODO: put this in!!!!
+        final int callableSites = getCallableSites();
         final VCFHeaderLine normalSampleHeaderLine = getHeaderForVariants().getMetaDataLine(Mutect2Engine.NORMAL_SAMPLE_KEY_IN_VCF_HEADER);
         final Optional<String> normalSample = normalSampleHeaderLine == null ? Optional.empty() : Optional.of(normalSampleHeaderLine.getValue());
 
         filteringEngine = new Mutect2FilteringEngine(MTFAC, tumorSample, normalSample);
-        filteringFirstPass = new FilteringFirstPass(tumorSample);
+        filteringFirstPass = new FilteringFirstPass(tumorSample, callableSites);
     }
 
     @Override
@@ -121,7 +124,7 @@ public final class FilterMutectCalls extends TwoPassVariantWalker {
 
     @Override
     protected void afterFirstPass() {
-        filteringFirstPass.learnModelForSecondPass(MTFAC.maxFalsePositiveRate);
+        filteringFirstPass.learnModelForSecondPass(MTFAC);
         filteringFirstPass.writeM2FilterSummary(MTFAC.mutect2FilteringStatsTable);
     }
 

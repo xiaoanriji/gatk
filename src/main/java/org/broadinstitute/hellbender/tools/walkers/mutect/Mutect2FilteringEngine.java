@@ -67,7 +67,7 @@ public class Mutect2FilteringEngine {
     private void applyTriallelicFilter(final VariantContext vc, final FilterResult filterResult) {
         if (vc.hasAttribute(GATKVCFConstants.TUMOR_LOD_KEY)) {
             final double[] tumorLods = getDoubleArrayAttribute(vc, GATKVCFConstants.TUMOR_LOD_KEY);
-            final long numPassingAltAlleles = Arrays.stream(tumorLods).filter(x -> x > MTFAC.TUMOR_LOD_THRESHOLD).count();
+            final long numPassingAltAlleles = Arrays.stream(tumorLods).filter(x -> x > MTFAC.lowConfidenceLod).count();
 
             if (numPassingAltAlleles > MTFAC.numAltAllelesThreshold) {
                 filterResult.addFilter(GATKVCFConstants.MULTIALLELIC_FILTER_NAME);
@@ -188,7 +188,7 @@ public class Mutect2FilteringEngine {
         if (vc.hasAttribute(GATKVCFConstants.TUMOR_LOD_KEY)) {
             final double[] tumorLods = getDoubleArrayAttribute(vc, GATKVCFConstants.TUMOR_LOD_KEY);
 
-            if (MathUtils.arrayMax(tumorLods) < MTFAC.TUMOR_LOD_THRESHOLD) {
+            if (MathUtils.arrayMax(tumorLods) < MTFAC.lowConfidenceLod) {
                 filterResult.addFilter(GATKVCFConstants.TUMOR_LOD_FILTER_NAME);
             }
         }
@@ -242,7 +242,7 @@ public class Mutect2FilteringEngine {
         }
     }
 
-    private static double[] getDoubleArrayAttribute(final VariantContext vc, final String attribute) {
+    public static double[] getDoubleArrayAttribute(final VariantContext vc, final String attribute) {
         return GATKProtectedVariantContextUtils.getAttributeAsDoubleArray(vc, attribute, () -> null, -1);
     }
 

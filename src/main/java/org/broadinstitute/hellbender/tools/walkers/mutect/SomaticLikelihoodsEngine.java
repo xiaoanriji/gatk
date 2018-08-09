@@ -5,6 +5,7 @@ import htsjdk.variant.variantcontext.Allele;
 import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.special.Gamma;
 import org.apache.commons.math3.util.MathArrays;
+import org.broadinstitute.hellbender.tools.walkers.readorientation.BetaDistributionShape;
 import org.broadinstitute.hellbender.utils.*;
 import org.broadinstitute.hellbender.utils.genotyper.LikelihoodMatrix;
 
@@ -105,4 +106,13 @@ public class SomaticLikelihoodsEngine {
         return MathUtils.logToLog10(logNumerator - logDenominator);
     }
 
+    // correct the log 10 odds originally output by Mutect2, which assumed a flat prior, to approximate
+    // the log 10 odds one would obtain from using a different, non-flat prior
+    public static double log10OddsCorrection(final double[] newPrior, final double[] oldPrior, final double[] counts) {
+        final double oldValue = log10DirichletNormalization(oldPrior)
+                - log10DirichletNormalization(MathArrays.ebeAdd(oldPrior, counts));
+        final double newValue = log10DirichletNormalization(newPrior)
+                - log10DirichletNormalization(MathArrays.ebeAdd(newPrior, counts));
+        return newValue - oldValue;
+    }
 }

@@ -9,6 +9,7 @@ public class M2FiltersArgumentCollection extends AssemblyBasedCallerArgumentColl
     private static final long serialVersionUID = 9345L;
     public static final String LOG_SOMATIC_PRIOR_LONG_NAME = "log-somatic-prior";
     public static final String TUMOR_LOD_LONG_NAME = "tumor-lod";
+    public static final String CONFIDENT_LOD_LONG_NAME = "confident-lod";
     public static final String NORMAL_ARTIFACT_LOD_LONG_NAME = "normal-artifact-lod";
     public static final String NORMAL_P_VALUE_THRESHOLD_LONG_NAME = "normal-p-value-threshold";
     public static final String MAX_GERMLINE_POSTERIOR_LONG_NAME = "max-germline-posterior";
@@ -56,7 +57,10 @@ public class M2FiltersArgumentCollection extends AssemblyBasedCallerArgumentColl
      * Only variants with tumor LODs exceeding this threshold can pass filtering.
      */
     @Argument(fullName = TUMOR_LOD_LONG_NAME, optional = true, doc = "LOD threshold for calling tumor variant")
-    public double TUMOR_LOD_THRESHOLD = 5.3;
+    public double lowConfidenceLod = 5.3;
+
+    @Argument(fullName = CONFIDENT_LOD_LONG_NAME, optional = true, doc = "LOD threshold for high-confidence variants")
+    public double highConfidenceLod = 8.0;
 
     /**
      * This is a measure of the minimum evidence to support that a variant observed in the tumor is not also present in the normal

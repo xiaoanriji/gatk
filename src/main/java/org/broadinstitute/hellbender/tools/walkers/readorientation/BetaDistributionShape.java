@@ -22,4 +22,6 @@ public class BetaDistributionShape {
     public double getBeta() {
         return beta;
     }
+
+    public double[] asDirichlet() { return new double[] {alpha, beta}; }
 }
