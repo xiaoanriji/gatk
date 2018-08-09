@@ -24,7 +24,7 @@ import java.util.stream.IntStream;
 public class Dirichlet {
     final protected double[] alpha;
 
-    public Dirichlet(final double... alpha) {
+    protected Dirichlet(final double... alpha) {
         Utils.nonNull(alpha);
         Utils.validateArg(alpha.length >= 1, "Dirichlet parameters must have at least one element");
         Utils.validateArg(MathUtils.allMatch(alpha, x -> x >= 0), "Dirichlet parameters may not be negative");

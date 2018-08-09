@@ -103,7 +103,8 @@ public final class FilterMutectCalls extends TwoPassVariantWalker {
         final String tumorSample = getTumorSampleName();
 
         // TODO: put this in!!!!
-        final int callableSites = getCallableSites();
+        final int callableSites = 0;
+                //getCallableSites();
         final VCFHeaderLine normalSampleHeaderLine = getHeaderForVariants().getMetaDataLine(Mutect2Engine.NORMAL_SAMPLE_KEY_IN_VCF_HEADER);
         final Optional<String> normalSample = normalSampleHeaderLine == null ? Optional.empty() : Optional.of(normalSampleHeaderLine.getValue());
 

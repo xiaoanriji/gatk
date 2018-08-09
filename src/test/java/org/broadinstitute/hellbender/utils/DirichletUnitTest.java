@@ -28,4 +28,15 @@ public class DirichletUnitTest {
         final double normalization2 = Math.pow(10, params2.log10Normalization());
         Assert.assertEquals(normalization2, 6, 1e-6);
     }
+
+    @Test
+    public void testNormalization() {
+        final double alpha = 5.7;
+        final double beta = 9.9;
+        final double x = 0.3;
+
+        final double normalization = Math.pow(10,Dirichlet.of(alpha, beta).log10Normalization());
+        final double rest = Math.pow(x, alpha - 1) * Math.pow(1 - x, beta - 1);
+        Assert.assertEquals(normalization * rest, new BetaDistribution(null, alpha, beta).density(x), 1e-6);
+    }
 }
