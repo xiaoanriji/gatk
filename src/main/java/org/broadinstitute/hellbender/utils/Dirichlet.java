@@ -66,6 +66,12 @@ public class Dirichlet {
         return MathUtils.applyToArray(alpha, a -> (Gamma.digamma(a) - digammaOfSum) * MathUtils.LOG10_OF_E);
     }
 
+    // the array of E[ln x_i] for components i
+    public double[] meanLogs() {
+        final double digammaOfSum = Gamma.digamma(MathUtils.sum(alpha));
+        return MathUtils.applyToArray(alpha, a -> Gamma.digamma(a) - digammaOfSum);
+    }
+
     public double[] meanWeights() {
         final double sum = MathUtils.sum(alpha);
         return MathUtils.applyToArray(alpha, x -> x / sum);
@@ -76,10 +82,14 @@ public class Dirichlet {
         return MathUtils.applyToArray(alpha, x -> Math.log10(x / sum));
     }
 
-    public double log10Normalization() {
+    public double logNormalization() {
         final double logNumerator = Gamma.logGamma(MathUtils.sum(alpha));
         final double logDenominator = MathUtils.sum(MathUtils.applyToArray(alpha, Gamma::logGamma));
-        return MathUtils.logToLog10(logNumerator - logDenominator);
+        return logNumerator - logDenominator;
+    }
+
+    public double log10Normalization() {
+        return MathUtils.logToLog10(logNormalization());
     }
 
     public int dimension() { return alpha.length; }
