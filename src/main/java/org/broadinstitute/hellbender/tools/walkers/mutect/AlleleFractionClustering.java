@@ -57,9 +57,12 @@ public class AlleleFractionClustering {
     }
 
     private void updatePriors(final List<double[]> responsibilities) {
-        log10NothingPrior = FastMath.log10(responsibilities.stream().mapToDouble(r -> r[0]).sum() / callableSites);
-        log10LowConfidencePrior = FastMath.log10(responsibilities.stream().mapToDouble(r -> r[1]).sum() / callableSites);
-        log10HighConfidencePrior = FastMath.log10(responsibilities.stream().mapToDouble(r -> r[2]).sum() / callableSites);
+
+        final double lowConfCount = responsibilities.stream().mapToDouble(r -> r[1]).sum();
+        log10LowConfidencePrior = FastMath.log10(lowConfCount / callableSites);
+        final double highConfCount = responsibilities.stream().mapToDouble(r -> r[2]).sum();
+        log10HighConfidencePrior = FastMath.log10(highConfCount / callableSites);
+        log10NothingPrior = FastMath.log10((callableSites - lowConfCount - highConfCount)/ callableSites);
     }
 
     private void fitShape(final List<double[]> counts, final List<double[]> responsibilities) {
@@ -104,8 +107,8 @@ public class AlleleFractionClustering {
             zHigh.add(rHigh);
         }
 
-        final double lowMean = altCountLow.doubleValue() / (altCountLow.doubleValue()+ refCountLow.doubleValue() + 1);
-        final double highMean = altCountHigh.doubleValue() / (altCountHigh.doubleValue()+ refCountHigh.doubleValue() + 1);
+        final double lowMean = (0.5 + altCountLow.doubleValue()) / (altCountLow.doubleValue()+ refCountLow.doubleValue() + 1);
+        final double highMean = (0.5 + altCountHigh.doubleValue()) / (altCountHigh.doubleValue()+ refCountHigh.doubleValue() + 1);
 
         // We get the mean a/(a+b) of our beta from the ratio of weighted alt counts to weighted total counts
         // now we optimize with respect to the overall scale, a.  That is, we optimize wrt a subject to b = (1-mean)*a/mean
