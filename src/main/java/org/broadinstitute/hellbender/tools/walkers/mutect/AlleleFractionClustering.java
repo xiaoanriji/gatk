@@ -84,7 +84,7 @@ public class AlleleFractionClustering {
             final double altCount = counts.get(n)[0];
             final double refCount = counts.get(n)[1];
             final double rLow = responsibilities.get(n)[1];
-            final double rHigh = responsibilities.get(n)[1];
+            final double rHigh = responsibilities.get(n)[2];
 
             altCountLow.add(rLow * altCount);
             altCountHigh.add(rHigh * altCount);
@@ -118,7 +118,7 @@ public class AlleleFractionClustering {
         final double alphaLow = OptimizationUtils.argmax(lowObjective, 0, 1000, lowConfidenceDistribution.getAlpha());
         final double alphaHigh = OptimizationUtils.argmax(highObjective, 0, 1000, highConfidenceDistribution.getAlpha());
         lowConfidenceDistribution = new BetaDistributionShape(alphaLow, getBeta(alphaLow, lowMean));
-        highConfidenceDistribution = new BetaDistributionShape(alphaHigh, getBeta(alphaHigh, lowMean));
+        highConfidenceDistribution = new BetaDistributionShape(alphaHigh, getBeta(alphaHigh, highMean));
     }
 
     private double objective(final double alpha, final double mean, final double x, final double y, final double z) {
