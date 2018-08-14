@@ -184,13 +184,25 @@ public class Mutect2FilteringEngine {
         }
     }
 
-    private static void applyInsufficientEvidenceFilter(final M2FiltersArgumentCollection MTFAC, final VariantContext vc, final FilterResult filterResult) {
-        if (vc.hasAttribute(GATKVCFConstants.TUMOR_LOD_KEY)) {
-            final double[] tumorLods = getDoubleArrayAttribute(vc, GATKVCFConstants.TUMOR_LOD_KEY);
+    private void applyInsufficientEvidenceFilter(final M2FiltersArgumentCollection MTFAC, final VariantContext vc, final FilterResult filterResult, final Optional<FilteringFirstPass> firstPass) {
+        if (!vc.hasAttribute(GATKVCFConstants.TUMOR_LOD_KEY)) {
+            return;
+        }
 
-            if (MathUtils.arrayMax(tumorLods) < MTFAC.lowConfidenceLod) {
+        final double[] tumorLods = getDoubleArrayAttribute(vc, GATKVCFConstants.TUMOR_LOD_KEY);
+        final int indexOfMaxTumorLod = MathUtils.maxElementIndex(tumorLods);
+        Genotype tumorGenotype = vc.getGenotype(tumorSample);
+        final int[] tumorAlleleDepths = tumorGenotype.getAD();
+
+        // on first pass, just apply a threshold
+        // on second pass, use the learned clustering
+        if (firstPass.isPresent()) {
+            final double somaticProability = firstPass.get().getSomaticProbability(tumorLods[indexOfMaxTumorLod], tumorAlleleDepths[0], tumorAlleleDepths[indexOfMaxTumorLod + 1]);
+            if (somaticProability < MTFAC.tumorPosteriorProbability) {
                 filterResult.addFilter(GATKVCFConstants.TUMOR_LOD_FILTER_NAME);
             }
+        } else if (MathUtils.arrayMax(tumorLods) < MTFAC.lowConfidenceLod) {
+                filterResult.addFilter(GATKVCFConstants.TUMOR_LOD_FILTER_NAME);
         }
     }
 
@@ -329,7 +341,7 @@ public class Mutect2FilteringEngine {
         firstPass.ifPresent(ffp -> Utils.validate(ffp.isReadyForSecondPass(), "First pass information has not been processed into a model for the second pass."));
         final FilterResult filterResult = new FilterResult();
         applyFilteredHaplotypeFilter(MTFAC, vc, filterResult, firstPass);
-        applyInsufficientEvidenceFilter(MTFAC, vc, filterResult);
+        applyInsufficientEvidenceFilter(MTFAC, vc, filterResult, firstPass);
         applyClusteredEventFilter(vc, filterResult);
         applyDuplicatedAltReadFilter(MTFAC, vc, filterResult);
         applyTriallelicFilter(vc, filterResult);

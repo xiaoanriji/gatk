@@ -44,22 +44,29 @@ public class AlleleFractionClustering {
                 final double tumorLog10Odds = pair.getLeft()[0];
                 final double refCount = pair.getRight()[0];
                 final double altCount = pair.getRight()[1];
-
-                final double lowConfidenceLog10OddsCorrection = SomaticLikelihoodsEngine.log10OddsCorrection(
-                        lowConfidenceDistribution, Dirichlet.flat(2), new double[]{altCount, refCount});
-                final double highConfidenceLog10OddsCorrection = SomaticLikelihoodsEngine.log10OddsCorrection(
-                        highConfidenceDistribution, Dirichlet.flat(2), new double[]{altCount, refCount});
-
-                final double[] unweightedLog10Responsibilities = new double[]{log10NothingPrior,
-                        log10LowConfidencePrior + tumorLog10Odds + lowConfidenceLog10OddsCorrection,
-                        log10HighConfidencePrior + tumorLog10Odds + highConfidenceLog10OddsCorrection};
-
-                return MathUtils.normalizeFromLog10ToLinearSpace(unweightedLog10Responsibilities);
+                return getResponsibilities(tumorLog10Odds, refCount, altCount);
             }).collect(Collectors.toList());
 
             updatePriors(responsibilities);
             fitShape(allCounts, responsibilities);
         }
+    }
+
+    private double[] getResponsibilities(final double tumorLog10Odds, final double refCount, final double altCount) {
+        final double lowConfidenceLog10OddsCorrection = SomaticLikelihoodsEngine.log10OddsCorrection(
+                lowConfidenceDistribution, Dirichlet.flat(2), new double[]{altCount, refCount});
+        final double highConfidenceLog10OddsCorrection = SomaticLikelihoodsEngine.log10OddsCorrection(
+                highConfidenceDistribution, Dirichlet.flat(2), new double[]{altCount, refCount});
+
+        final double[] unweightedLog10Responsibilities = new double[]{log10NothingPrior,
+                log10LowConfidencePrior + tumorLog10Odds + lowConfidenceLog10OddsCorrection,
+                log10HighConfidencePrior + tumorLog10Odds + highConfidenceLog10OddsCorrection};
+
+        return MathUtils.normalizeFromLog10ToLinearSpace(unweightedLog10Responsibilities);
+    }
+
+    public double getSomaticProbability(final double tumorLog10Odds, final double refCount, final double altCount) {
+        return 1 - getResponsibilities(tumorLog10Odds, refCount, altCount)[0];
     }
 
     private void updatePriors(final List<double[]> responsibilities) {
