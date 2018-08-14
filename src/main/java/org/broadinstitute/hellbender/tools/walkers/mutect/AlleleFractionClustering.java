@@ -73,13 +73,13 @@ public class AlleleFractionClustering {
 
     private BetaDistributionShape fitShape(List<double[]> counts, final double[] responsibilities) {
         final int N = counts.size();
-        final double weightedAltCount = IntStream.range(0, N).mapToDouble(n -> counts.get(n)[0]*responsibilities[n]).sum();
-        final double weightedRefCount = IntStream.range(0, N).mapToDouble(n -> counts.get(n)[1]*responsibilities[n]).sum();
+        final double weightedAltCount = IntStream.range(0, N).mapToDouble(n -> counts.get(n)[1]*responsibilities[n]).sum();
+        final double weightedRefCount = IntStream.range(0, N).mapToDouble(n -> counts.get(n)[0]*responsibilities[n]).sum();
         final double mean = (weightedAltCount + 0.5) / (weightedAltCount + weightedRefCount + 1);
         final double[] totalCounts = IntStream.range(0, N).mapToDouble(n -> MathUtils.sum(counts.get(n))).toArray();
 
         final double lhs = (1/(mean*(1-mean))) * IntStream.range(0, N).mapToDouble(n ->
-                responsibilities[n]*MathUtils.square(counts.get(n)[0] - mean * totalCounts[n])).sum();
+                responsibilities[n]*MathUtils.square(counts.get(n)[1] - mean * totalCounts[n])).sum();
 
         final UnivariateRealFunction lhsMinusRhs = a -> {
                 final double b = getBeta(a, mean);
