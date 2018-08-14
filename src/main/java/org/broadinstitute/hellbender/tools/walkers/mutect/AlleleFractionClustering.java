@@ -2,12 +2,18 @@ package org.broadinstitute.hellbender.tools.walkers.mutect;
 
 import org.apache.commons.lang.mutable.MutableDouble;
 import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.math.FunctionEvaluationException;
+import org.apache.commons.math.MathException;
+import org.apache.commons.math.analysis.UnivariateRealFunction;
+import org.apache.commons.math.analysis.solvers.BisectionSolver;
 import org.apache.commons.math3.util.FastMath;
+import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.utils.*;
 
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class AlleleFractionClustering {
     private BetaDistributionShape highConfidenceDistribution = new BetaDistributionShape(1,1);
@@ -65,65 +71,37 @@ public class AlleleFractionClustering {
         log10NothingPrior = FastMath.log10((callableSites - lowConfCount - highConfCount)/ callableSites);
     }
 
-    private void fitShape(final List<double[]> counts, final List<double[]> responsibilities) {
-        Utils.validateArg(counts.size() == responsibilities.size(), "must have one responsibility per count");
+    private BetaDistributionShape fitShape(List<double[]> counts, final double[] responsibilities) {
+        final int N = counts.size();
+        final double weightedAltCount = IntStream.range(0, N).mapToDouble(n -> counts.get(n)[0]*responsibilities[n]).sum();
+        final double weightedRefCount = IntStream.range(0, N).mapToDouble(n -> counts.get(n)[1]*responsibilities[n]).sum();
+        final double mean = (weightedAltCount + 0.5) / (weightedAltCount + weightedRefCount + 1);
+        final double[] totalCounts = IntStream.range(0, N).mapToDouble(n -> MathUtils.sum(counts.get(n))).toArray();
 
-        final MutableDouble xLow = new MutableDouble(0);
-        final MutableDouble yLow = new MutableDouble(0);
-        final MutableDouble zLow = new MutableDouble(0);
-        final MutableDouble xHigh = new MutableDouble(0);
-        final MutableDouble yHigh = new MutableDouble(0);
-        final MutableDouble zHigh = new MutableDouble(0);
+        final double lhs = (1/(mean*(1-mean))) * IntStream.range(0, N).mapToDouble(n ->
+                responsibilities[n]*MathUtils.square(counts.get(n)[0] - mean * totalCounts[n])).sum();
 
+        final UnivariateRealFunction lhsMinusRhs = a -> {
+                final double b = getBeta(a, mean);
+                return lhs - IntStream.range(0,N).mapToDouble(n -> responsibilities[n]*totalCounts[n]*(a+b+totalCounts[n])).sum()/(a+b+1);
+        };
 
-        final MutableDouble altCountLow = new MutableDouble(0);
-        final MutableDouble altCountHigh = new MutableDouble(0);
-        final MutableDouble refCountLow = new MutableDouble(0);
-        final MutableDouble refCountHigh = new MutableDouble(0);
-        for (int n = 0; n < counts.size(); n++) {
-            final double altCount = counts.get(n)[0];
-            final double refCount = counts.get(n)[1];
-            final double rLow = responsibilities.get(n)[1];
-            final double rHigh = responsibilities.get(n)[2];
-
-            altCountLow.add(rLow * altCount);
-            altCountHigh.add(rHigh * altCount);
-            refCountLow.add(rLow * refCount);
-            refCountHigh.add(rHigh * refCount);
-
-            final double weightedAlpha = rLow * lowConfidenceDistribution.getAlpha() +
-                    rHigh * highConfidenceDistribution.getAlpha() + altCount;
-            final double weightedBeta = rLow * lowConfidenceDistribution.getBeta() +
-                    rHigh * highConfidenceDistribution.getBeta() + refCount;
-
-            final BetaDistributionShape meanFieldPosterior = new BetaDistributionShape(weightedAlpha, weightedBeta);
-            final double[] meanLogs = meanFieldPosterior.meanLogs();
-
-            xLow.add(rLow * meanLogs[0]);
-            yLow.add(rLow * meanLogs[1]);
-            xHigh.add(rHigh * meanLogs[0]);
-            yHigh.add(rHigh * meanLogs[1]);
-            zLow.add(rLow);
-            zHigh.add(rHigh);
+        try {
+            final double alpha = new BisectionSolver().solve(2000, lhsMinusRhs, 1, 100);
+            return new BetaDistributionShape(alpha, getBeta(alpha, mean));
+        } catch (MathException ex) {
+            throw new GATKException(ex.getMessage());
         }
 
-        final double lowMean = (0.5 + altCountLow.doubleValue()) / (altCountLow.doubleValue()+ refCountLow.doubleValue() + 1);
-        final double highMean = (0.5 + altCountHigh.doubleValue()) / (altCountHigh.doubleValue()+ refCountHigh.doubleValue() + 1);
 
-        // We get the mean a/(a+b) of our beta from the ratio of weighted alt counts to weighted total counts
-        // now we optimize with respect to the overall scale, a.  That is, we optimize wrt a subject to b = (1-mean)*a/mean
-        final Function<Double, Double> lowObjective = a -> objective(a, lowMean, xLow.doubleValue(), yLow.doubleValue(), zLow.doubleValue());
-        final Function<Double, Double> highObjective = a -> objective(a, highMean, xHigh.doubleValue(), yHigh.doubleValue(), zHigh.doubleValue());
-
-        final double alphaLow = OptimizationUtils.argmax(lowObjective, 0, 1000, lowConfidenceDistribution.getAlpha());
-        final double alphaHigh = OptimizationUtils.argmax(highObjective, 0, 1000, highConfidenceDistribution.getAlpha());
-        lowConfidenceDistribution = new BetaDistributionShape(alphaLow, getBeta(alphaLow, lowMean));
-        highConfidenceDistribution = new BetaDistributionShape(alphaHigh, getBeta(alphaHigh, highMean));
     }
 
-    private double objective(final double alpha, final double mean, final double x, final double y, final double z) {
-        final double beta = getBeta(alpha, mean);
-        return new BetaDistributionShape(alpha,beta).log10Normalization() * z + x * alpha + y * beta;
+    private void fitShape(final List<double[]> counts, final List<double[]> responsibilities) {
+        Utils.validateArg(counts.size() == responsibilities.size(), "must have one responsibility per count");
+        final double[] lowConfidenceResponsibilities = responsibilities.stream().mapToDouble(r -> r[1]).toArray();
+        final double[] highConfidenceResponsibilities = responsibilities.stream().mapToDouble(r -> r[2]).toArray();
+        lowConfidenceDistribution = fitShape(counts, lowConfidenceResponsibilities);
+        highConfidenceDistribution = fitShape(counts, highConfidenceResponsibilities);
     }
 
     private double getBeta(final double alpha, final double mean) {
