@@ -139,7 +139,7 @@ public class FilteringFirstPass {
 
     public double getSomaticProbability(final double tumorLog10Odds, final double refCount, final double altCount) {
         Utils.validateArg(readyForSecondPass, "somatic probability should only be called after learning from first pass.");
-        return 1 - afClustering.getSomaticProbability(tumorLog10Odds, refCount, altCount);
+        return afClustering.getSomaticProbability(tumorLog10Odds, refCount, altCount);
     }
 
     public static boolean hasPhaseInfo(final Genotype genotype) {
