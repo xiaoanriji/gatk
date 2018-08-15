@@ -1,5 +1,6 @@
 package org.broadinstitute.hellbender.engine;
 
+import com.google.common.annotations.VisibleForTesting;
 import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.tribble.Feature;
 import htsjdk.tribble.FeatureCodec;
@@ -151,6 +152,13 @@ public final class FeatureManager implements AutoCloseable {
         this.featureSources = new LinkedHashMap<>();
 
         initializeFeatureSources(featureQueryLookahead, toolInstance, cloudPrefetchBuffer, cloudIndexPrefetchBuffer, reference);
+    }
+
+    @VisibleForTesting
+    public FeatureManager(final Map<FeatureInput<? extends Feature>, Class<? extends Feature>> featureInputsToTypeMap, final String toolInstanceName, final int featureQueryLookahead, final int cloudPrefetchBuffer, final int cloudIndexPrefetchBuffer, final Path reference) {
+        this.toolInstanceSimpleClassName = toolInstanceName;
+        this.featureSources = new LinkedHashMap<>();
+        featureInputsToTypeMap.forEach((k,v) -> addToFeatureSources(featureQueryLookahead, k, v, cloudPrefetchBuffer, cloudIndexPrefetchBuffer, reference));
     }
 
     /**

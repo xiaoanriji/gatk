@@ -1,7 +1,6 @@
 package org.broadinstitute.hellbender.tools.funcotator;
 
 import htsjdk.samtools.SAMSequenceDictionary;
-import htsjdk.tribble.Feature;
 import htsjdk.tribble.util.ParsingUtils;
 import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.variantcontext.VariantContextBuilder;
@@ -15,16 +14,13 @@ import org.broadinstitute.hellbender.engine.filters.VariantFilter;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.DataSourceUtils;
-import org.broadinstitute.hellbender.tools.funcotator.dataSources.gencode.GencodeFuncotation;
+import org.broadinstitute.hellbender.tools.funcotator.engine.FuncotationEngine;
 import org.broadinstitute.hellbender.tools.funcotator.mafOutput.MafOutputRenderer;
-import org.broadinstitute.hellbender.tools.funcotator.metadata.FuncotationMetadata;
 import org.broadinstitute.hellbender.tools.funcotator.metadata.VcfFuncotationMetadata;
 import org.broadinstitute.hellbender.tools.funcotator.vcfOutput.VcfOutputRenderer;
 import org.broadinstitute.hellbender.transformers.VariantTransformer;
 import org.broadinstitute.hellbender.utils.SequenceDictionaryUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
-import org.broadinstitute.hellbender.utils.codecs.gencode.GencodeGtfFeature;
-import org.broadinstitute.hellbender.utils.codecs.xsvLocatableTable.XsvTableFeature;
 import org.broadinstitute.hellbender.utils.io.IOUtils;
 import picard.cmdline.programgroups.VariantEvaluationProgramGroup;
 
@@ -35,7 +31,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Funcotator (FUNCtional annOTATOR) analyzes given variants for their function (as retrieved from a set of data sources) and produces the analysis in a specified output file.
@@ -305,9 +300,8 @@ public class Funcotator extends VariantWalker {
     //==================================================================================================================
 
     private OutputRenderer outputRenderer;
-    private final List<DataSourceFuncotationFactory> dataSourceFactories = new ArrayList<>();
 
-    private final List<FeatureInput<? extends Feature>> manualLocatableFeatureInputs = new ArrayList<>();
+    private FuncotationEngine funcotationEngine;
 
     /**
      * Whether the input variant contigs must be converted to hg19.
@@ -316,7 +310,6 @@ public class Funcotator extends VariantWalker {
      */
     private boolean mustConvertInputContigsToHg19 = false;
 
-    private FuncotationMetadata inputMetadata;
 
     //==================================================================================================================
 
@@ -339,7 +332,7 @@ public class Funcotator extends VariantWalker {
         }
 
         // Next set up our transcript list:
-        userTranscriptIdSet = processTranscriptList(userTranscriptIdSet);
+        final Set<String> finalUserTranscriptIdSet = processTranscriptList(userTranscriptIdSet);
 
         final LinkedHashMap<String, String> annotationDefaultsMap = splitAnnotationArgsIntoMap(annotationDefaults);
         final LinkedHashMap<String, String> annotationOverridesMap = splitAnnotationArgsIntoMap(annotationOverrides);
@@ -348,26 +341,27 @@ public class Funcotator extends VariantWalker {
         // Sort data sources to make them process in the same order each time:
         dataSourceDirectories.sort(Comparator.naturalOrder());
         final Map<Path, Properties> configData = DataSourceUtils.getAndValidateDataSourcesFromPaths(referenceVersion, dataSourceDirectories);
-        initializeManualFeaturesForLocatableDataSources(configData);
-        dataSourceFactories.addAll(
-                DataSourceUtils.createDataSourceFuncotationFactoriesForDataSources(configData, annotationOverridesMap, transcriptSelectionMode, userTranscriptIdSet)
-        );
-
-        // Sort our data source factories to ensure they're always in the same order:  gencode datasources first
-        dataSourceFactories.sort(DataSourceUtils::datasourceComparator);
 
         // Create the metadata directly from the input.
-        inputMetadata = VcfFuncotationMetadata.create(new ArrayList<>(getHeaderForVariants().getInfoHeaderLines()));
+        funcotationEngine = new FuncotationEngine(VcfFuncotationMetadata.create(new ArrayList<>(getHeaderForVariants().getInfoHeaderLines())),
+                DataSourceUtils.createDataSourceFuncotationFactoriesForDataSources(configData, annotationOverridesMap,
+                        transcriptSelectionMode, finalUserTranscriptIdSet));
+
+        // Note that the next line has the effect of registering the FeatureInputs with the engine (via addFeatureInputsAfterInitialization).
+        //   If a funcotation factory feature input is null, then it is not locatable.
+        funcotationEngine.getDataSourceFactories().stream()
+                .filter(ff -> ff.getMainSourceFileAsFeatureInput() != null)
+                .forEach(ff -> addFeatureInputsAfterInitialization(ff.getMainSourceFileAsFeatureInput(), ff.getAnnotationFeatureClass(), lookaheadFeatureCachingInBp));
 
         // Determine which annotations are accounted for (by the funcotation factories) and which are not.
-        final LinkedHashMap<String, String> unaccountedForDefaultAnnotations = getUnaccountedForAnnotations( dataSourceFactories, annotationDefaultsMap );
-        final LinkedHashMap<String, String> unaccountedForOverrideAnnotations = getUnaccountedForAnnotations( dataSourceFactories, annotationOverridesMap );
+        final LinkedHashMap<String, String> unaccountedForDefaultAnnotations = getUnaccountedForAnnotations( funcotationEngine.getDataSourceFactories(), annotationDefaultsMap );
+        final LinkedHashMap<String, String> unaccountedForOverrideAnnotations = getUnaccountedForAnnotations( funcotationEngine.getDataSourceFactories(), annotationOverridesMap );
 
         // Set up our output renderer:
         switch (outputFormatType) {
             case MAF:
                 outputRenderer = new MafOutputRenderer(outputFile.toPath(),
-                        dataSourceFactories,
+                        funcotationEngine.getDataSourceFactories(),
                         getHeaderForVariants(),
                         unaccountedForDefaultAnnotations,
                         unaccountedForOverrideAnnotations,
@@ -375,7 +369,7 @@ public class Funcotator extends VariantWalker {
                 break;
             case VCF:
                 outputRenderer = new VcfOutputRenderer(createVCFWriter(outputFile),
-                        dataSourceFactories,
+                        funcotationEngine.getDataSourceFactories(),
                         getHeaderForVariants(),
                         unaccountedForDefaultAnnotations,
                         unaccountedForOverrideAnnotations,
@@ -496,16 +490,13 @@ public class Funcotator extends VariantWalker {
 
     @Override
     public void closeTool() {
-
-        for ( final DataSourceFuncotationFactory factory : dataSourceFactories ) {
-            if ( factory != null ) {
-                factory.close();
-            }
+        if (funcotationEngine != null) {
+            funcotationEngine.close();
         }
+
         if ( outputRenderer != null ) {
             outputRenderer.close();
         }
-
     }
 
     //==================================================================================================================
@@ -546,64 +537,10 @@ public class Funcotator extends VariantWalker {
      */
     private void enqueueAndHandleVariant(final VariantContext variant, final ReferenceContext referenceContext, final FeatureContext featureContext) {
 
-        //==============================================================================================================
-        // Get our manually-specified feature inputs:
-
-        final Map<String, List<Feature>> featureSourceMap = new HashMap<>();
-
-        for ( final FeatureInput<? extends Feature> featureInput : manualLocatableFeatureInputs ) {
-            @SuppressWarnings("unchecked")
-            final List<Feature> featureList = (List<Feature>)featureContext.getValues(featureInput);
-            featureSourceMap.put( featureInput.getName(), featureList );
-        }
-
-        //==============================================================================================================
-        // First create only the transcript (Gencode) funcotations:
-
-        if (retrieveGencodeFuncotationFactoryStream().count() > 1) {
-            logger.warn("Attempting to annotate with more than one GENCODE datasource.  If these have overlapping transcript IDs, errors may occur.");
-        }
-
-        final List<GencodeFuncotation> transcriptFuncotations = retrieveGencodeFuncotationFactoryStream()
-                .map(gf -> gf.createFuncotations(variant, referenceContext, featureSourceMap))
-                .flatMap(List::stream)
-                .map(gf -> (GencodeFuncotation) gf).collect(Collectors.toList());
-
-        //==============================================================================================================
-        // Create the funcotations for non-Gencode data sources:
-
-        // Create a place to keep our funcotations:
-        final FuncotationMap funcotationMap = FuncotationMap.createFromGencodeFuncotations(transcriptFuncotations);
-
-        // Perform the rest of the annotation.  Note that this code manually excludes the Gencode Funcotations.
-        for (final DataSourceFuncotationFactory funcotationFactory : dataSourceFactories ) {
-
-            // Note that this guarantees that we do not add GencodeFuncotations a second time.
-            if (!funcotationFactory.getType().equals(FuncotatorArgumentDefinitions.DataSourceType.GENCODE)) {
-                final List<String> txIds = funcotationMap.getTranscriptList();
-
-                for (final String txId: txIds) {
-                    funcotationMap.add(txId, funcotationFactory.createFuncotations(variant, referenceContext, featureSourceMap, funcotationMap.getGencodeFuncotations(txId)));
-                }
-            }
-        }
-
-        //==============================================================================================================
-        // Create the funcotations for the input and add to all txID mappings.
-
-        final List<String> txIds = funcotationMap.getTranscriptList();
-
-        for (final String txId: txIds) {
-            funcotationMap.add(txId, FuncotatorUtils.createFuncotations(variant, inputMetadata, FuncotatorConstants.DATASOURCE_NAME_FOR_INPUT_VCFS));
-        }
+        final FuncotationMap funcotationMap = funcotationEngine.createFuncotationMapForVariant(variant, referenceContext, featureContext);
 
         // At this point there is only one transcript ID in the funcotation map if canonical or best effect are selected
         outputRenderer.write(variant, funcotationMap);
-    }
-
-    private Stream<DataSourceFuncotationFactory> retrieveGencodeFuncotationFactoryStream() {
-        return dataSourceFactories.stream()
-                .filter(f -> f.getType().equals(FuncotatorArgumentDefinitions.DataSourceType.GENCODE));
     }
 
     /**
@@ -627,54 +564,6 @@ public class Funcotator extends VariantWalker {
         }
 
         return annotationMap;
-    }
-
-    private void initializeManualFeaturesForLocatableDataSources(final Map<Path, Properties> metaData) {
-        for ( final Map.Entry<Path, Properties> entry : metaData.entrySet() ) {
-
-            logger.debug("Initializing Features for: " + entry.getValue().getProperty("name") + " ...");
-
-            // Note: we need no default case since we know these are valid:
-            final String stringType = entry.getValue().getProperty("type");
-            switch ( FuncotatorArgumentDefinitions.DataSourceType.getEnum(stringType) ) {
-                case LOCATABLE_XSV:
-                    // Add our features manually so we can match over them:
-                    addFeaturesForLocatableDataSource(entry.getKey(), entry.getValue(), XsvTableFeature.class);
-                    break;
-                case GENCODE:
-                    // Add our features manually so we can match over them:
-                    addFeaturesForLocatableDataSource(entry.getKey(), entry.getValue(), GencodeGtfFeature.class);
-                    break;
-                case VCF:
-                    // Add our features manually so we can match over them:
-                    addFeaturesForLocatableDataSource(entry.getKey(), entry.getValue(), VariantContext.class);
-                    break;
-                // Non-locatable data source types go here:
-                case SIMPLE_XSV:
-                case COSMIC:
-                    break;
-                default:
-                    throw new GATKException("Non-locatable type of DataSourceFuncotationFactory encountered: " + stringType );
-            }
-        }
-    }
-
-    private void addFeaturesForLocatableDataSource(final Path dataSourceFile,
-                                                   final Properties dataSourceProperties,
-                                                   final Class<? extends Feature> featureClazz) {
-
-        final String name = dataSourceProperties.getProperty(DataSourceUtils.CONFIG_FILE_FIELD_NAME_NAME);
-
-        // Inject our features into our list of feature data sources:
-        final FeatureInput<? extends Feature> featureInput = addFeatureInputsAfterInitialization(
-                dataSourceFile.resolveSibling(
-                        IOUtils.getPath( dataSourceProperties.getProperty(DataSourceUtils.CONFIG_FILE_FIELD_NAME_SRC_FILE) )
-                ).toUri().toString(),
-                name,
-                featureClazz, lookaheadFeatureCachingInBp);
-
-        // Add our feature input to our list of manual inputs:
-        manualLocatableFeatureInputs.add(featureInput);
     }
 
     /**

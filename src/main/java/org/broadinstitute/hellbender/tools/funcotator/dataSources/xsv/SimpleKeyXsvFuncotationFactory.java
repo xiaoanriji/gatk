@@ -150,7 +150,7 @@ public class SimpleKeyXsvFuncotationFactory extends DataSourceFuncotationFactory
     // Override Methods:
 
     @Override
-    protected Class<? extends Feature> getAnnotationFeatureClass() {
+    public Class<? extends Feature> getAnnotationFeatureClass() {
         // Returning Feature.class here implies that this class doesn't care about what features it gets.
         return Feature.class;
     }
