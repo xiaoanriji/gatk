@@ -18,13 +18,13 @@ import java.util.stream.IntStream;
 public class AlleleFractionClustering {
     private BetaDistributionShape highConfidenceDistribution = new BetaDistributionShape(1,1);
     private BetaDistributionShape lowConfidenceDistribution = new BetaDistributionShape(1,1);
-    private final int callableSites;
+    private final long callableSites;
     private double log10HighConfidencePrior;
     private double log10LowConfidencePrior;
     private double log10NothingPrior;
 
     public AlleleFractionClustering(final List<ImmutablePair<double[], double[]>> tumorLodsAndCounts,
-                                    final int callableSites, final M2FiltersArgumentCollection MTFAC) {
+                                    final long callableSites, final M2FiltersArgumentCollection MTFAC) {
         Utils.validateArg(MTFAC.highConfidenceLod >= MTFAC.lowConfidenceLod, "High confidence threshold can't be smaller than low-confidence threshold.");
         this.callableSites = callableSites;
         final List<double[]> allCounts = tumorLodsAndCounts.stream().map(pair -> pair.getRight()).collect(Collectors.toList());
@@ -49,6 +49,7 @@ public class AlleleFractionClustering {
 
             updatePriors(responsibilities);
             fitShape(allCounts, responsibilities);
+            int h = 90;
         }
     }
 

@@ -28,10 +28,10 @@ public class FilteringFirstPass {
     final Map<String, FilterStats> filterStats = new HashMap<>();
     AlleleFractionClustering afClustering = null;
     final String tumorSample;
-    final int callableSites;    //TODO: emit this in M2 and grab from vcf just like tumor sample
+    final long callableSites;    //TODO: emit this in M2 and grab from vcf just like tumor sample
     boolean readyForSecondPass = false;
 
-    public FilteringFirstPass(final String tumorSample, final int callableSites) {
+    public FilteringFirstPass(final String tumorSample, final long callableSites) {
         this.tumorSample = tumorSample;
         this.callableSites = callableSites;
     }
