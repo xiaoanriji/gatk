@@ -73,7 +73,7 @@ public class AlleleFractionClustering {
     private void updatePriors(final List<double[]> responsibilities) {
 
         final double lowConfCount = responsibilities.stream().mapToDouble(r -> r[1]).sum();
-        log10LowConfidencePrior = FastMath.log10(lowConfCount / callableSites);
+        log10LowConfidencePrior = Double.NEGATIVE_INFINITY; //FastMath.log10(lowConfCount / callableSites);
         final double highConfCount = responsibilities.stream().mapToDouble(r -> r[2]).sum();
         log10HighConfidencePrior = FastMath.log10(highConfCount / callableSites);
         log10NothingPrior = FastMath.log10((callableSites - lowConfCount - highConfCount)/ callableSites);
