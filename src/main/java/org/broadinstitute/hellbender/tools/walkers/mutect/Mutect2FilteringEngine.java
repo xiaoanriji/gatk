@@ -67,7 +67,7 @@ public class Mutect2FilteringEngine {
     private void applyTriallelicFilter(final VariantContext vc, final FilterResult filterResult) {
         if (vc.hasAttribute(GATKVCFConstants.TUMOR_LOD_KEY)) {
             final double[] tumorLods = getDoubleArrayAttribute(vc, GATKVCFConstants.TUMOR_LOD_KEY);
-            final long numPassingAltAlleles = Arrays.stream(tumorLods).filter(x -> x > MTFAC.lowConfidenceLod).count();
+            final long numPassingAltAlleles = Arrays.stream(tumorLods).filter(x -> x > MTFAC.firstPassTumorLod).count();
 
             if (numPassingAltAlleles > MTFAC.numAltAllelesThreshold) {
                 filterResult.addFilter(GATKVCFConstants.MULTIALLELIC_FILTER_NAME);
@@ -201,7 +201,7 @@ public class Mutect2FilteringEngine {
             if (somaticProability < MTFAC.tumorPosteriorProbability) {
                 filterResult.addFilter(GATKVCFConstants.TUMOR_LOD_FILTER_NAME);
             }
-        } else if (MathUtils.arrayMax(tumorLods) < MTFAC.lowConfidenceLod) {
+        } else if (MathUtils.arrayMax(tumorLods) < MTFAC.firstPassTumorLod) {
                 filterResult.addFilter(GATKVCFConstants.TUMOR_LOD_FILTER_NAME);
         }
     }
@@ -341,7 +341,6 @@ public class Mutect2FilteringEngine {
         firstPass.ifPresent(ffp -> Utils.validate(ffp.isReadyForSecondPass(), "First pass information has not been processed into a model for the second pass."));
         final FilterResult filterResult = new FilterResult();
         applyFilteredHaplotypeFilter(MTFAC, vc, filterResult, firstPass);
-        applyInsufficientEvidenceFilter(MTFAC, vc, filterResult, firstPass);
         applyClusteredEventFilter(vc, filterResult);
         applyDuplicatedAltReadFilter(MTFAC, vc, filterResult);
         applyTriallelicFilter(vc, filterResult);
@@ -355,6 +354,7 @@ public class Mutect2FilteringEngine {
         applyMappingQualityFilter(MTFAC, vc, filterResult);
         applyMedianFragmentLengthDifferenceFilter(MTFAC, vc, filterResult);
         applyReadPositionFilter(MTFAC, vc, filterResult);
+        applyInsufficientEvidenceFilter(MTFAC, vc, filterResult, firstPass);
 
         // The following filters use the information gathered during the first pass
         applyReadOrientationFilter(vc, filterResult, firstPass);

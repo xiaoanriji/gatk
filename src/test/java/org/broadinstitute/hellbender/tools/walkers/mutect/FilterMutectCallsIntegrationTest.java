@@ -15,7 +15,8 @@ public class FilterMutectCallsIntegrationTest extends CommandLineProgramTest {
     public void testNormalNormal() {
         Utils.resetRandomGenerator();
 
-        final File inputVcf = new File("/Users/davidben/Desktop/dream/4/", "synthetic.challenge.set4.tumor-filtered.vcf");
+        //final File inputVcf = new File("/Users/davidben/Desktop/dream/4/", "synthetic.challenge.set4.tumor-filtered.vcf");
+        final File inputVcf = new File("/Users/davidben/Desktop/normal-normal", "nn1.vcf");
         final File outputVcf = createTempFile("filtered", ".vcf");
         final String[] createPonArgs = {
                 "-V", inputVcf.getAbsolutePath(),

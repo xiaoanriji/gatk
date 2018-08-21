@@ -1,8 +1,6 @@
 package org.broadinstitute.hellbender.tools.walkers.mutect;
 
-import org.apache.commons.lang.mutable.MutableDouble;
 import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.math.FunctionEvaluationException;
 import org.apache.commons.math.MathException;
 import org.apache.commons.math.analysis.UnivariateRealFunction;
 import org.apache.commons.math.analysis.solvers.BisectionSolver;
@@ -11,28 +9,23 @@ import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.utils.*;
 
 import java.util.List;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class AlleleFractionClustering {
-    private BetaDistributionShape highConfidenceDistribution = new BetaDistributionShape(1,1);
-    private BetaDistributionShape lowConfidenceDistribution = new BetaDistributionShape(1,1);
+    private BetaDistributionShape somaticDistribution = new BetaDistributionShape(1,1);
     private final long callableSites;
-    private double log10HighConfidencePrior;
-    private double log10LowConfidencePrior;
+    private double log10SomaticPrior;
     private double log10NothingPrior;
 
     public AlleleFractionClustering(final List<ImmutablePair<double[], double[]>> tumorLodsAndCounts,
                                     final long callableSites, final M2FiltersArgumentCollection MTFAC) {
-        Utils.validateArg(MTFAC.highConfidenceLod >= MTFAC.lowConfidenceLod, "High confidence threshold can't be smaller than low-confidence threshold.");
         this.callableSites = callableSites;
         final List<double[]> allCounts = tumorLodsAndCounts.stream().map(pair -> pair.getRight()).collect(Collectors.toList());
 
         List<double[]> responsibilities = tumorLodsAndCounts.stream()
                 .mapToDouble(pair -> MathUtils.arrayMax(pair.getLeft()))
-                .mapToObj(lod -> lod < MTFAC.lowConfidenceLod ? new double[] {1, 0, 0} :
-                        (lod < MTFAC.highConfidenceLod ? new double[] {0,1,0} : new double[] {0,0,1}))
+                .mapToObj(lod -> lod < MTFAC.highConfidenceLod ? new double[] {1,0} : new double[] {0,1})
                 .collect(Collectors.toList());
         updatePriors(responsibilities);
         fitShape(allCounts, responsibilities);
@@ -53,15 +46,14 @@ public class AlleleFractionClustering {
         }
     }
 
+    // array of responsibilities / posteriors, starting with nothing and proceeding through all somatic clusters
+    // (currently there is only one somatic cluster)
     private double[] getResponsibilities(final double tumorLog10Odds, final double refCount, final double altCount) {
-        final double lowConfidenceLog10OddsCorrection = SomaticLikelihoodsEngine.log10OddsCorrection(
-                lowConfidenceDistribution, Dirichlet.flat(2), new double[]{altCount, refCount});
-        final double highConfidenceLog10OddsCorrection = SomaticLikelihoodsEngine.log10OddsCorrection(
-                highConfidenceDistribution, Dirichlet.flat(2), new double[]{altCount, refCount});
+        final double log10OddsCorrection = SomaticLikelihoodsEngine.log10OddsCorrection(
+                somaticDistribution, Dirichlet.flat(2), new double[]{altCount, refCount});
 
         final double[] unweightedLog10Responsibilities = new double[]{log10NothingPrior,
-                log10LowConfidencePrior + tumorLog10Odds + lowConfidenceLog10OddsCorrection,
-                log10HighConfidencePrior + tumorLog10Odds + highConfidenceLog10OddsCorrection};
+                log10SomaticPrior + tumorLog10Odds + log10OddsCorrection};
 
         return MathUtils.normalizeFromLog10ToLinearSpace(unweightedLog10Responsibilities);
     }
@@ -71,12 +63,9 @@ public class AlleleFractionClustering {
     }
 
     private void updatePriors(final List<double[]> responsibilities) {
-
-        final double lowConfCount = responsibilities.stream().mapToDouble(r -> r[1]).sum();
-        log10LowConfidencePrior = Double.NEGATIVE_INFINITY; //FastMath.log10(lowConfCount / callableSites);
-        final double highConfCount = responsibilities.stream().mapToDouble(r -> r[2]).sum();
-        log10HighConfidencePrior = FastMath.log10(highConfCount / callableSites);
-        log10NothingPrior = FastMath.log10((callableSites - lowConfCount - highConfCount)/ callableSites);
+        final double somaticCount = responsibilities.stream().mapToDouble(r -> r[1]).sum();
+        log10SomaticPrior = FastMath.log10(somaticCount / callableSites);
+        log10NothingPrior = FastMath.log10((callableSites - somaticCount)/ callableSites);
     }
 
     private BetaDistributionShape fitShape(List<double[]> counts, final double[] responsibilities) {
@@ -100,16 +89,12 @@ public class AlleleFractionClustering {
         } catch (MathException ex) {
             throw new GATKException(ex.getMessage());
         }
-
-
     }
 
     private void fitShape(final List<double[]> counts, final List<double[]> responsibilities) {
         Utils.validateArg(counts.size() == responsibilities.size(), "must have one responsibility per count");
-        final double[] lowConfidenceResponsibilities = responsibilities.stream().mapToDouble(r -> r[1]).toArray();
-        final double[] highConfidenceResponsibilities = responsibilities.stream().mapToDouble(r -> r[2]).toArray();
-        lowConfidenceDistribution = fitShape(counts, lowConfidenceResponsibilities);
-        highConfidenceDistribution = fitShape(counts, highConfidenceResponsibilities);
+        final double[] somaticResponsibilities = responsibilities.stream().mapToDouble(r -> r[1]).toArray();
+        somaticDistribution = fitShape(counts, somaticResponsibilities);
     }
 
     private double getBeta(final double alpha, final double mean) {

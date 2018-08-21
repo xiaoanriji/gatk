@@ -55,10 +55,10 @@ public class M2FiltersArgumentCollection extends AssemblyBasedCallerArgumentColl
     public double log10PriorProbOfSomaticEvent = -6.0;
 
     /**
-     * Only variants with tumor LODs exceeding this threshold can pass filtering.
+     * Tumor LOD threshold for first pass
      */
-    @Argument(fullName = TUMOR_LOD_LONG_NAME, optional = true, doc = "LOD threshold for low-confidence variants")
-    public double lowConfidenceLod = 5.3;
+    @Argument(fullName = TUMOR_LOD_LONG_NAME, optional = true, doc = "Tumor LOD threshold for first pass")
+    public double firstPassTumorLod = 5.3;
 
     @Argument(fullName = CONFIDENT_LOD_LONG_NAME, optional = true, doc = "LOD threshold for high-confidence variants")
     public double highConfidenceLod = 8.0;
