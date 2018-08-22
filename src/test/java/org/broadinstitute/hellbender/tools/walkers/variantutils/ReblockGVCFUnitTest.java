@@ -15,7 +15,6 @@ public class ReblockGVCFUnitTest {
     private final static Allele LONG_REF = Allele.create("ACTG", true);
     private final static Allele DELETION = Allele.create("A", false);
     private final static Allele SHORT_REF = Allele.create("A", true);
-    private final static Allele SNP = Allele.create("T", false);
     private final static Allele LONG_SNP = Allele.create("TCTA", false);
 
     @Test
