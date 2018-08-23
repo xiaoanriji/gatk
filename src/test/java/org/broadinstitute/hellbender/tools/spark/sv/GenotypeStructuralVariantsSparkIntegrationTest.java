@@ -21,7 +21,7 @@ public class GenotypeStructuralVariantsSparkIntegrationTest extends CommandLineP
     private static final File INPUT_FASTQ_DIR = new File(publicTestDir, "/test-files/sv_evidence_for_variants_fastqs");
     private static final File INPUT_INTERVALS = new File(publicTestDir, "/test-files/sv_evidence_for_variants_intervals.list");
 
-    @Test
+    @Test(enabled=false)
     public void test() {
         final File outputVcf = createTempFile("output", ".vcf.gz");
         outputVcf.delete();

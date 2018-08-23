@@ -30,6 +30,7 @@ public class GATKRegistrator implements KryoRegistrator {
 
         registerGATKClasses(kryo);
 
+
         // register the ADAM data types using Avro serialization, including:
         //     AlignmentRecord
         //     Genotype

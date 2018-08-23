@@ -12,7 +12,6 @@ import htsjdk.samtools.util.OverlapDetector;
 import htsjdk.tribble.Feature;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import javafx.collections.transformation.SortedList;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
