@@ -90,10 +90,6 @@ public class VcfFuncotationFactory extends DataSourceFuncotationFactory {
 
     /**
      * Use this only for testing,
-     *
-     * @param name
-     * @param version
-     * @param sourceFilePath
      */
     @VisibleForTesting
     public VcfFuncotationFactory(final String name, final String version, final Path sourceFilePath) {
