@@ -586,7 +586,6 @@ public abstract class GATKSparkTool extends SparkCommandLineProgram {
         Path indexPath = ReferenceSequenceFileFactory.getFastaIndexFileName(referencePath);
         Path dictPath = ReferenceSequenceFileFactory.getDefaultDictionaryForReferenceSequence(referencePath);
 
-        // TODO: check existence of all files
         ctx.addFile(referenceFile);
         ctx.addFile(indexPath.toUri().toString());
         ctx.addFile(dictPath.toUri().toString());
@@ -611,7 +610,6 @@ public abstract class GATKSparkTool extends SparkCommandLineProgram {
             } else {
                 throw new IllegalArgumentException("Unrecognized known sites file extension. Must be .vcf or .vcf.gz");
             }
-            // TODO: check existence of all files
             ctx.addFile(vcfFileName);
             ctx.addFile(vcfIndexFileName);
         }
