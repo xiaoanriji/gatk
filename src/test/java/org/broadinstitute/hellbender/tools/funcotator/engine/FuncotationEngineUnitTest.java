@@ -7,15 +7,15 @@ import org.broadinstitute.hellbender.GATKBaseTest;
 import org.broadinstitute.hellbender.engine.FeatureContext;
 import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.engine.ReferenceDataSource;
+import org.broadinstitute.hellbender.testutils.FuncotatorReferenceTestUtils;
+import org.broadinstitute.hellbender.testutils.VariantContextTestUtils;
 import org.broadinstitute.hellbender.tools.funcotator.FuncotationMap;
 import org.broadinstitute.hellbender.tools.funcotator.FuncotatorTestConstants;
 import org.broadinstitute.hellbender.tools.funcotator.TranscriptSelectionMode;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.DataSourceUtils;
 import org.broadinstitute.hellbender.tools.funcotator.metadata.VcfFuncotationMetadata;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
-import org.broadinstitute.hellbender.utils.test.FuncotatorReferenceTestUtils;
 import org.broadinstitute.hellbender.utils.test.FuncotatorTestUtils;
-import org.broadinstitute.hellbender.utils.test.VariantContextTestUtils;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
@@ -25,7 +25,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
-public class FuncotatorEngineUnitTest extends GATKBaseTest {
+public class FuncotationEngineUnitTest extends GATKBaseTest {
     final static private String INPUT_VCF = FuncotatorTestConstants.FUNCOTATOR_TEST_DIR + "/PIK3CA_SNPS_engine_test_chr3.vcf";
     private static final String DS_PIK3CA_DIR = largeFileTestDir + "funcotator" + File.separator + "small_ds_pik3ca" + File.separator;
     @DataProvider

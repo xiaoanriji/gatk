@@ -95,7 +95,8 @@ public class VcfFuncotationFactory extends DataSourceFuncotationFactory {
      * @param version
      * @param sourceFilePath
      */
-    VcfFuncotationFactory(final String name, final String version, final Path sourceFilePath) {
+    @VisibleForTesting
+    public VcfFuncotationFactory(final String name, final String version, final Path sourceFilePath) {
         // The class in the FeatureInput must always match what is returned from {@link VcfFuncotationFactory#getAnnotationFeatureClass}
         this(name, version, sourceFilePath, new LinkedHashMap<>(), new FeatureInput<VariantContext>(sourceFilePath.toString(), name, new HashMap<>()));
     }
