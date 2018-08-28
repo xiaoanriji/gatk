@@ -19,13 +19,13 @@ import org.broadinstitute.hellbender.engine.ReferenceContext;
 import org.broadinstitute.hellbender.engine.ReferenceDataSource;
 import org.broadinstitute.hellbender.engine.ReferenceMemorySource;
 import org.broadinstitute.hellbender.exceptions.GATKException;
+import org.broadinstitute.hellbender.testutils.FuncotatorReferenceTestUtils;
 import org.broadinstitute.hellbender.tools.funcotator.*;
 import org.broadinstitute.hellbender.tools.funcotator.dataSources.DataSourceUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.codecs.gencode.*;
 import org.broadinstitute.hellbender.utils.io.IOUtils;
 import org.broadinstitute.hellbender.utils.reference.ReferenceBases;
-import org.broadinstitute.hellbender.testutils.FuncotatorReferenceTestUtils;
 import org.testng.Assert;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -150,7 +150,7 @@ public class GencodeFuncotationFactoryUnitTest extends GATKBaseTest {
             dataWithReference[dataWithReference.length-4] = featureReader;
             dataWithReference[dataWithReference.length-3] = referenceDataSource;
             dataWithReference[dataWithReference.length-2] = transcriptFastaFile;
-            dataWithReference[dataWithReference.length-1] = transcriptFastaFile;
+            dataWithReference[dataWithReference.length-1] = transcriptGtfFile;
             outList.add(dataWithReference);
         }
 

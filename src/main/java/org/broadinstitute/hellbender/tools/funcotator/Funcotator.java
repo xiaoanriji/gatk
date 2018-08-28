@@ -348,7 +348,8 @@ public class Funcotator extends VariantWalker {
                         transcriptSelectionMode, finalUserTranscriptIdSet));
 
         // Note that the next line has the effect of registering the FeatureInputs with the engine (via addFeatureInputsAfterInitialization).
-        //   If a funcotation factory feature input is null, then it is not locatable.
+        //   If a funcotation factory feature input (i.e. the source file as a feature input) is null, then the funcotation
+        //   factory is not locatable.
         funcotationEngine.getDataSourceFactories().stream()
                 .filter(ff -> ff.getMainSourceFileAsFeatureInput() != null)
                 .forEach(ff -> addFeatureInputsAfterInitialization(ff.getMainSourceFileAsFeatureInput(), ff.getAnnotationFeatureClass(), lookaheadFeatureCachingInBp));
