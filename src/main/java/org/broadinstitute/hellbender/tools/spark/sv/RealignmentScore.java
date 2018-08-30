@@ -239,13 +239,13 @@ public final class RealignmentScore {
          int result = 0;
          if (forward) {
              for (int i = refOffset, j = seqOffset; i < stop; i++, j++) {
-                 if (!Nucleotide.decode(ref[i]).intersects(Nucleotide.decode(seq[j]))) {
+                 if (!Nucleotide.intersect(ref[i], seq[j])) {
                      result++;
                  }
              }
          } else {
             for (int i = refOffset, j = seqOffset; i < stop; i++, j--) {
-                if (!Nucleotide.decode(ref[i]).complement().intersects(Nucleotide.decode(seq[j]))) {
+                if (!Nucleotide.intersect(Nucleotide.complement(ref[i]), seq[j])) {
                     result++;
                 }
             }
