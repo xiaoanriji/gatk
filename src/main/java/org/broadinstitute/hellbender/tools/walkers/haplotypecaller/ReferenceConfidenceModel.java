@@ -575,7 +575,7 @@ public final class ReferenceConfidenceModel {
                                              final byte[] refBases,
                                              final int refStart,
                                              final int maxIndelSize) {
-        // fast exit when n bases left < maxIndelSize
+        // fast exit when n bases left < maxIndelSize   -- but readStart doesn't mean what you think it means -- actually index of refBases where read starts
         if( read.getLength() - readStart < maxIndelSize || refBases.length - refStart < maxIndelSize ) {
             return false;
         }
@@ -587,6 +587,7 @@ public final class ReferenceConfidenceModel {
         //final byte[] readQuals = read.getBaseQualitiesNoCopy();
         final byte[] readBases = AlignmentUtils.getBasesAlignedOneToOne(read);  //calls getBasesNoCopy if CIGAR is all match
         final byte[] readQuals = AlignmentUtils.getBaseQualsAlignedOneToOne(read);
+
 
         final int baselineMMSum = sumMismatchingQualities(readBases, readQuals, readStart, refBases, refStart, Integer.MAX_VALUE);
 
@@ -610,7 +611,7 @@ public final class ReferenceConfidenceModel {
      * Calculate the number of indel informative reads at pileup
      *
      * @param pileup a pileup
-     * @param pileupOffsetIntoRef the position of the pileup in the reference
+     * @param pileupOffsetIntoRef index along the reference corresponding to the pileup
      * @param ref the ref bases
      * @param maxIndelSize maximum indel size to consider in the informativeness calculation
      * @return an integer >= 0
@@ -620,11 +621,31 @@ public final class ReferenceConfidenceModel {
         int nInformative = 0;
         for ( final PileupElement p : pileup ) {
             final GATKRead read = p.getRead();
-            final int offset = p.getOffset();
+            int offset = p.getOffset();  //index into read base byte[] corresponding to this position in the reference
 
             // doesn't count as evidence
             if ( p.isBeforeDeletionStart() || p.isBeforeInsertion() || p.isDeletion() ) {
                 continue;
+            }
+
+            //TODO: refactor; extract this as a method
+            final Cigar cigar = read.getCigar();
+            final int indexInCigar = p.getCurrentCigarOffset();
+            final CigarElement ce = p.getCurrentCigarElement();
+            final int indexInElement = p.getOffsetInCurrentCigar();
+            for (int i = 0; i < indexInCigar; i++) {
+                if (cigar.getCigarElement(i).getOperator().equals(CigarOperator.INSERTION)) {
+                    offset -= cigar.getCigarElement(i).getLength();
+                }
+                else if (cigar.getCigarElement(i).getOperator().equals(CigarOperator.DELETION)) {
+                    offset += cigar.getCigarElement(i).getLength();
+                }
+            }
+            if (ce.getOperator().equals(CigarOperator.INSERTION)) {
+                offset -= indexInElement;
+            }
+            else if (ce.getOperator().equals(CigarOperator.DELETION)) {
+                offset += indexInElement;
             }
 
             // todo -- this code really should handle CIGARs directly instead of relying on the above tests
