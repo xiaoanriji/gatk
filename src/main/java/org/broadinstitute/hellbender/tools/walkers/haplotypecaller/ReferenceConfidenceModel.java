@@ -468,7 +468,8 @@ public final class ReferenceConfidenceModel {
         Utils.validateArg(calledHaplotypes.contains(refHaplotype), "calledHaplotypes must contain the refHaplotype");
         Utils.validateArg(readLikelihoods.numberOfSamples() == 1, () -> "readLikelihoods must contain exactly one sample but it contained " + readLikelihoods.numberOfSamples());
 
-        final List<GATKRead> reads = activeRegion.getReads();
+        //final List<GATKRead> reads = activeRegion.getReads();
+        final List<GATKRead> reads = readLikelihoods.sampleReads(0);
 
         final LocusIteratorByState libs = new LocusIteratorByState(reads.iterator(), LocusIteratorByState.NO_DOWNSAMPLING,
                 false, samples.asSetOfSamples(), activeRegion.getHeader(), true);
@@ -547,7 +548,7 @@ public final class ReferenceConfidenceModel {
         for ( int i = 0; i < n; i++ ) {
             final byte readBase = readBases[readStart + i];
             final byte refBase  = refBases[refStart + i];
-            if ( readBase != refBase ) {
+            if ( readBase != refBase && readBase != 'N') {
                 sum += readQuals[readStart + i];
                 if ( sum > maxSum ) { // abort early
                     return sum;
@@ -582,8 +583,10 @@ public final class ReferenceConfidenceModel {
         // We are safe to use the faster no-copy versions of getBases and getBaseQualities here,
         // since we're not modifying the returned arrays in any way. This makes a small difference
         // in the HaplotypeCaller profile, since this method is a major hotspot.
-        final byte[] readBases = read.getBasesNoCopy();
-        final byte[] readQuals = read.getBaseQualitiesNoCopy();
+        //final byte[] readBases = read.getBasesNoCopy();
+        //final byte[] readQuals = read.getBaseQualitiesNoCopy();
+        final byte[] readBases = AlignmentUtils.getBasesAlignedOneToOne(read);  //calls getBasesNoCopy if CIGAR is all match
+        final byte[] readQuals = AlignmentUtils.getBaseQualsAlignedOneToOne(read);
 
         final int baselineMMSum = sumMismatchingQualities(readBases, readQuals, readStart, refBases, refStart, Integer.MAX_VALUE);
 
