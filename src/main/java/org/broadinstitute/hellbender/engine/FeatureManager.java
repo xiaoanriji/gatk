@@ -154,6 +154,15 @@ public final class FeatureManager implements AutoCloseable {
         initializeFeatureSources(featureQueryLookahead, toolInstance, cloudPrefetchBuffer, cloudIndexPrefetchBuffer, reference);
     }
 
+    /**
+     * TODO: Fill this in.
+     * @param featureInputsToTypeMap
+     * @param toolInstanceName
+     * @param featureQueryLookahead
+     * @param cloudPrefetchBuffer
+     * @param cloudIndexPrefetchBuffer
+     * @param reference
+     */
     @VisibleForTesting
     public FeatureManager(final Map<FeatureInput<? extends Feature>, Class<? extends Feature>> featureInputsToTypeMap, final String toolInstanceName, final int featureQueryLookahead, final int cloudPrefetchBuffer, final int cloudIndexPrefetchBuffer, final Path reference) {
         this.toolInstanceSimpleClassName = toolInstanceName;
