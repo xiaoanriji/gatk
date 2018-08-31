@@ -30,6 +30,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+/**
+ * Collects relevant and convenient information for genotyping a structural variant.
+ */
 @DefaultSerializer(SVGenotypingContext.Serializer.class)
 final class SVGenotypingContext {
 

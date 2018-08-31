@@ -52,7 +52,7 @@ public class SingleSequenceReferenceAligner<T, U> implements AutoCloseable {
     private final TriFunction<? super T, List<List<BwaMemAlignment>>, List<String>, ? extends U> alignmentOf;
     private final Predicate<? super BwaMemAlignment> alignmentFilter;
 
-    public SingleSequenceReferenceAligner(final String name, final byte[] bases,
+    public  SingleSequenceReferenceAligner(final String name, final byte[] bases,
                                           final Function<? super T, List<byte[]>> basesOf,
                                           final TriFunction<? super T, List<List<BwaMemAlignment>>, List<String>, ? extends U> alignmentOf) {
         this(name, bases, basesOf, alignmentOf, NO_FILTER);

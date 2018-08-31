@@ -1,17 +1,15 @@
-package org.broadinstitute.hellbender.tools.spark.sv.utils;
+package org.broadinstitute.hellbender.engine;
 
 import com.esotericsoftware.kryo.DefaultSerializer;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import org.broadinstitute.hellbender.engine.Shard;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
-import org.broadinstitute.hellbender.utils.Utils;
 
 import java.util.Iterator;
 
 /**
- * Created by valentin on 11/5/17.
+ * Simplest shard given an interval and a iterable over the elements in that shard,
  */
 @DefaultSerializer(SimpleShard.Serializer.class)
 public final class SimpleShard<T> implements Shard<T> {

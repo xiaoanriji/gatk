@@ -345,7 +345,7 @@ public final class FastaReferenceWriter implements AutoCloseable {
      * @return this instance.
      * @throws IllegalArgumentException if any argument does not comply with requirements listed above or if a sequence
      *  with the same name has already been added to the writer.
-     * @throws IllegalStateException if no base was added to the previous base or the writer is already closed.
+     * @throws IllegalStateException if no base was added to the previous sequence or the writer is already closed.
      * @throws IOException if such exception is thrown when writing into the output resources.
      */
     public FastaReferenceWriter startSequence(final String sequenceName)
@@ -378,7 +378,7 @@ public final class FastaReferenceWriter implements AutoCloseable {
      * @return this instance.
      * @throws IllegalArgumentException if any argument does not comply with requirements listed above or if a sequence
      *  with the same name has already been added to the writer.
-     * @throws IllegalStateException if no base was added to the previous base or the writer is already closed.
+     * @throws IllegalStateException if no base was added to the previous sequence or the writer is already closed.
      * @throws IOException if such exception is thrown when writing into the output resources.
      */
     public FastaReferenceWriter startSequence(final String sequenceName, final int basesPerLine)
@@ -416,7 +416,7 @@ public final class FastaReferenceWriter implements AutoCloseable {
      * @return this instance.
      * @throws IllegalArgumentException if any argument does not comply with requirements listed above or if a sequence
      *  with the same name has already been added to the writer.
-     * @throws IllegalStateException if no base was added to the previous base or the writer is already closed.
+     * @throws IllegalStateException if no base was added to the previous sequence or the writer is already closed.
      * @throws IOException if such exception is thrown when writing into the output resources.
      */
     public FastaReferenceWriter startSequence(final String sequenceName, final String description)
@@ -453,7 +453,7 @@ public final class FastaReferenceWriter implements AutoCloseable {
      * @param basesPerLine number of bases per line for this sequence.
      * @return this instance.
      * @throws IllegalArgumentException if any argument does not comply with requirements listed above.
-     * @throws IllegalStateException if no base was added to the previous base or the writer is already closed of
+     * @throws IllegalStateException if no base was added to the previous sequence or the writer is already closed of
      *         the sequence has been already added.
      * @throws IOException if such exception is thrown when writing into the output resources.
      */

@@ -54,25 +54,6 @@ public enum ReadPairOrientation {
     }
 
     /**
-     * Checks whether this read pair orientation indicates that the original template has an inversion with respect
-     * to the reference.
-     * @return {@code true} iff so.
-     */
-    public boolean impliesInversion() {
-        return this == LL || this == RR;
-    }
-
-    /**
-     * Checks whether this read pair orientation indicates that the original template contains either a (tandem) duplication or
-     * or short range translocation with respect to the reference; it is impossible to distinguish between these two
-     * cases with the pair orientation alone.
-     * @return {@code true} iff so.
-     */
-    public boolean impliesTranslocationOrDuplication() {
-        return this == RL;
-    }
-
-    /**
      * Checks whether this read pair orientation indicates a concrete defined orientation.
      * @return {@code true} iff so.
      */
@@ -104,7 +85,7 @@ public enum ReadPairOrientation {
      * @param r1 the only input read.
      * @return never {@code null}.
      */
-    public static ReadPairOrientation fromRead(final SAMRecord r1) {
+    public static ReadPairOrientation of(final SAMRecord r1) {
         Utils.nonNull(r1);
         if (!r1.getReadPairedFlag() || r1.getReadUnmappedFlag() || r1.getMateUnmappedFlag()) {
             return XX;
@@ -128,7 +109,7 @@ public enum ReadPairOrientation {
      * @param right the member of the pair that maps right-most on that contig.
      * @return never {@code null}, but {@link #XX} if the strand information is missing for any in the pair.
      */
-    public static ReadPairOrientation fromStrands(final Strand left, final Strand right) {
+    public static ReadPairOrientation of(final Strand left, final Strand right) {
         if (left == null || right == null) {
             return XX;
         } else {

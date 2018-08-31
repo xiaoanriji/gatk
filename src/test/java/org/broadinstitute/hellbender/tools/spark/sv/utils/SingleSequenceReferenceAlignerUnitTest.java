@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 /**
  * Unit tests for {@link SingleSequenceReferenceAligner}.
  */
-public class SingleContigReferenceAlignerUnitTest extends BaseTest {
+public class SingleSequenceReferenceAlignerUnitTest extends BaseTest {
 
     private static final int READ_LENGTH = 250;
     private static final int NUM_ALIGNS = 1000;

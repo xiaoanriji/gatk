@@ -3,29 +3,42 @@ package org.broadinstitute.hellbender.tools.spark.sv.discovery.alignment;
 import htsjdk.samtools.Cigar;
 import htsjdk.samtools.CigarElement;
 import htsjdk.samtools.CigarOperator;
+import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.samtools.SAMSequenceRecord;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.broadinstitute.hellbender.GATKBaseTest;
 import org.broadinstitute.hellbender.engine.datasources.ReferenceMultiSource;
 import org.broadinstitute.hellbender.engine.datasources.ReferenceSource;
 import org.broadinstitute.hellbender.engine.datasources.ReferenceWindowFunctions;
+import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.utils.IntervalUtils;
 import org.broadinstitute.hellbender.utils.Nucleotide;
 import org.broadinstitute.hellbender.utils.RandomDNA;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
+import org.broadinstitute.hellbender.utils.Utils;
+import org.broadinstitute.hellbender.utils.read.CigarUtils;
 import org.broadinstitute.hellbender.utils.reference.ReferenceBases;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Writer;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /**
  * Created by valentin on 4/23/18.
@@ -36,11 +49,195 @@ public class AlignedContigUnitTest extends GATKBaseTest {
 
     private static final ReferenceSource REFERENCE = new ReferenceMultiSource(twoBitRefURL, ReferenceWindowFunctions.IDENTITY_FUNCTION);
 
+    public static void toFasta(final File file, final ReferenceSource reference, final AlignedContig contig, final int padding, final boolean matchedBasedAsDots) throws IOException {
+        try (final Writer writer = new FileWriter(file)){
+            toFasta(writer, reference, contig, padding, matchedBasedAsDots);
+        } catch (final IOException ex) {
+            throw new UserException.CouldNotCreateOutputFile(file, ex.getMessage(), ex);
+        }
+    }
+
+    public static void toFasta(final Writer writer, final ReferenceSource reference, final AlignedContig contig, final int padding, final boolean matchedBasesAsDots) throws IOException {
+        writer.append(toFastaString(reference, contig, padding, matchedBasesAsDots));
+    }
+
+    public static String toFastaString(final ReferenceSource reference, final AlignedContig contig, final int padding, final boolean matchedBasesAsDots)
+            throws IOException
+    {
+        Utils.nonNull(reference);
+        Utils.nonNull(contig);
+        final SAMSequenceDictionary dictionary = Utils.nonNull(reference.getReferenceSequenceDictionary());
+        final List<SimpleInterval> refereneSpans = contig.getAlignments().stream()
+                .map(ai -> {
+                    final SimpleInterval referenceSpan = ai.referenceSpan;
+                    final int leftSoftClip = ai.cigarAlongReference().getCigarElement(0).getOperator() == CigarOperator.S ?
+                            ai.cigarAlongReference().getCigarElement(0).getLength() : 0;
+                    final int rightSoftClip = ai.cigarAlongReference().getLastCigarElement().getOperator() == CigarOperator.S ?
+                            ai.cigarAlongReference().getLastCigarElement().getLength() : 0;
+                    if (leftSoftClip == 0 && rightSoftClip == 0 && padding == 0) {
+                        return referenceSpan;
+                    } else {
+                        return new SimpleInterval(referenceSpan.getContig(), referenceSpan.getStart() - leftSoftClip - padding, referenceSpan.getEnd() + rightSoftClip + padding);
+                    }
+                }).collect(Collectors.toList());
+        Collections.sort(refereneSpans, IntervalUtils.getDictionaryOrderComparator(reference.getReferenceSequenceDictionary()));
+        final Deque<SimpleInterval> mergedSpans = new ArrayDeque<>(refereneSpans.size());
+        SimpleInterval last;
+        mergedSpans.add(last = refereneSpans.get(0));
+        for (int i = 1; i < refereneSpans.size(); i++) {
+            final SimpleInterval next = refereneSpans.get(i);
+            if (last.overlapsWithMargin(next, 1)) {
+                mergedSpans.removeLast();
+                mergedSpans.addLast(last = last.mergeWithContiguous(next));
+            } else {
+                mergedSpans.addLast(last = next);
+            }
+        }
+        final StringBuilder output = new StringBuilder(10000);
+        for (final SimpleInterval referenceSpan : mergedSpans) {
+            final Stream<ImmutablePair<Integer, Integer>> insertions = contig.getAlignments().stream()
+                    .filter(ai -> referenceSpan.contains(ai.referenceSpan))
+                    .filter(ai -> ai.cigarAlong5to3DirectionOfContig.containsOperator(CigarOperator.I))
+                    .flatMap(ai -> {
+                        final List<ImmutablePair<Integer, Integer>> insertionAndLengths = new ArrayList<>(ai.cigarAlong5to3DirectionOfContig.numCigarElements());
+                        int referencePostion = ai.referenceSpan.getStart();
+                        for (final CigarElement e : ai.cigarAlongReference()) {
+                            if (e.getOperator().consumesReferenceBases()) {
+                                referencePostion += e.getLength();
+                            } else if (e.getOperator() == CigarOperator.I) {
+                                insertionAndLengths.add(new ImmutablePair<>(referencePostion, e.getLength()));
+                            }
+                        }
+                        return insertionAndLengths.stream();
+                    });
+            final Map<Integer, Integer> insertionPositionAndMaxLength = insertions
+                    //           .collect(Collectors.groupingBy(p -> p.getLeft()));
+                    .collect(Collectors.groupingBy(ImmutablePair::getLeft, Collectors.mapping(ImmutablePair::getRight, Collectors.reducing(0, Math::max))));
+            final int width = referenceSpan.size() + insertionPositionAndMaxLength.values().stream().mapToInt(i -> i).sum();
+            Utils.nonNull(referenceSpan.getContig());
+            final int beyondContigEndPadding = referenceSpan.getEnd() - dictionary.getSequence(referenceSpan.getContig()).getSequenceLength();
+            final SimpleInterval actualReferenceSpan;
+            output.append('>');
+            if (beyondContigEndPadding <= 0) {
+                output.append(referenceSpan);
+                actualReferenceSpan = referenceSpan;
+            } else {
+                actualReferenceSpan = new SimpleInterval(referenceSpan.getContig(), referenceSpan.getStart(), dictionary.getSequence(referenceSpan.getContig()).getSequenceLength());
+                output.append(actualReferenceSpan);
+                output.append("\t(").append(beyondContigEndPadding).append(" gap padded beyond end");
+            }
+            output.append('\n');
+            final int refSeqOffset = output.length();
+            final byte[] refBases = reference.getReferenceBases(actualReferenceSpan).getBases();
+            for (int i = 0, pos = referenceSpan.getStart(); pos <= actualReferenceSpan.getEnd(); ++i, ++pos) {
+                final int insertLength = insertionPositionAndMaxLength.getOrDefault(pos, 0);
+                if (insertLength > 0) {
+                    for (int j = 0; j < insertLength; ++j) {
+                        output.append('-');
+                    }
+                }
+                output.append(Character.toUpperCase((char) refBases[i]));
+            }
+            for (int i = 0; i < beyondContigEndPadding; i++) {
+                output.append('-');
+            }
+            final byte[] referenceBasesWithGaps = output.subSequence(refSeqOffset, output.length()).toString().getBytes();
+            output.append('\n');
+
+            contig.getAlignments().stream()
+                    .filter(ai -> actualReferenceSpan.contains(ai.referenceSpan.expandWithinContig(padding, dictionary)))
+                    .forEach(ai -> {
+                        output.append('>').append(contig.getContigName()).append(':').append(ai.startInAssembledContig).append('-').append(ai.endInAssembledContig);
+                        output.append('\t');
+                        ai.appendSATagString(output);
+                        output.append('\n');
+                        final List<CigarElement> cigar = new ArrayList<>(ai.cigarAlong5to3DirectionOfContig.numCigarElements() + 2);
+
+                        // Since we need to skip to the first aligned reference position we artificailly add a deletion operation
+                        // that would consume those references bases before the first aligned based to the contig:
+                        if (actualReferenceSpan.getStart() < ai.referenceSpan.getStart()) {
+                            cigar.add(new CigarElement(ai.referenceSpan.getStart() - actualReferenceSpan.getStart(), CigarOperator.D));
+                        }
+                        cigar.addAll(ai.cigarAlongReference().getCigarElements());
+                        int linePos = 0;
+                        final int contigBaseIncrease = ai.forwardStrand ? 1 : -1; // we move forward or backward in the contig sequence?
+                        int nextContigBase = (ai.forwardStrand ? ai.startInAssembledContig - CigarUtils.countLeftClippedBases(ai.cigarAlong5to3DirectionOfContig)
+                                : ai.endInAssembledContig + CigarUtils.countRightSoftClippedBases(ai.cigarAlong5to3DirectionOfContig)) - 1;
+                        for (final CigarElement e : cigar) {
+                            final int length = e.getLength();
+                            final CigarOperator o = e.getOperator();
+                            if (o.consumesReferenceBases() && !o.consumesReadBases()) {
+                                for (int remaining = length; remaining > 0; ++linePos) {
+                                    if (referenceBasesWithGaps[linePos] != '-') {
+                                        remaining--;
+                                    } else {
+                                        System.err.append('.');
+                                    }
+                                    output.append('-');
+                                }
+                            } else if (o == CigarOperator.S) {
+                                if (output.length() == 0 || output.charAt(output.length() - 1) == '-') {
+                                    for (; referenceBasesWithGaps[linePos] == '-'; ++linePos) {
+                                        output.append('-');
+                                    } // skip to the next ref base.
+                                    output.setLength(output.length() - length);
+                                    linePos -= length;
+                                }
+                                for (int i = 0; i < length; i++, ++linePos) {
+                                    final byte contigBase = ai.forwardStrand
+                                            ? contig.getContigSequence()[nextContigBase]
+                                            : Nucleotide.complement(contig.getContigSequence()[nextContigBase]);
+                                    output.append(Character.toLowerCase((char) contigBase));
+                                    nextContigBase += contigBaseIncrease;
+                                }
+                            } else if (o.consumesReadBases() && o.consumesReferenceBases()) {
+                                for (int remaining = length; remaining > 0; ++linePos) {
+                                    if (referenceBasesWithGaps[linePos] != '-') {
+                                        remaining--;
+                                        final byte contigBase = ai.forwardStrand
+                                                ? contig.getContigSequence()[nextContigBase]
+                                                : Nucleotide.complement(contig.getContigSequence()[nextContigBase]);
+                                        if (matchedBasesAsDots && Nucleotide.same(referenceBasesWithGaps[linePos], contigBase)) {
+                                            output.append('.');
+                                        } else {
+                                            output.append(Character.toUpperCase((char) contigBase));
+                                        }
+                                        nextContigBase += contigBaseIncrease;
+                                    } else {
+                                        output.append('-');
+                                    }
+                                }
+                            } else if (o.consumesReadBases()) {// && !o.consumesReferenceBases())
+                                for (int i = 0; i < length; i++, ++linePos) {
+                                    final byte contigBase = ai.forwardStrand
+                                            ? contig.getContigSequence()[nextContigBase]
+                                            : Nucleotide.complement(contig.getContigSequence()[nextContigBase]);
+                                    output.append(Character.toUpperCase((char) contigBase));
+                                    nextContigBase += contigBaseIncrease;
+                                }
+                                while (referenceBasesWithGaps[linePos] == '-') {
+                                    output.append('-');
+                                    linePos++;
+                                }
+                            }
+                        }
+                        for (; linePos < width; ++linePos) {
+                            output.append('-');
+                        }
+                        output.append('\n');
+                    });
+            while (Character.isWhitespace(output.charAt(output.length() - 1))) {
+                output.setLength(output.length() - 1);
+            }
+        }
+        return output.toString();
+    }
+
 
     @Test(dataProvider = "toFastaData")
     public void testToFasta(final AlignedContig contig, final int padding, final boolean matchesAsDot, final String expected)
         throws IOException {
-        final String actual = AlignedContig.toFastaString(REFERENCE, contig, padding, matchesAsDot);
+        final String actual = toFastaString(REFERENCE, contig, padding, matchesAsDot);
 //        if (!actual.equals(expected)) {
 //            Assert.assertEquals(actual.length(), expected.length());
 //            for (int i = 0; i < actual.length(); i++) {

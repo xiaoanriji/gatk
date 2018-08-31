@@ -5,7 +5,7 @@ import org.broadinstitute.barclay.argparser.Argument;
 import java.io.Serializable;
 
 /**
- * Created by valentin on 6/1/18.
+ * Collects arguments that control how we score read re-alignments.
  */
 @SuppressWarnings("WeakerAccess")
 public final class RealignmentScoreParameters implements Serializable {

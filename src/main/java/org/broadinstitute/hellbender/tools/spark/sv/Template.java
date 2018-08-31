@@ -8,9 +8,6 @@ import org.broadinstitute.hellbender.tools.spark.sv.evidence.TemplateFragmentOrd
 import org.broadinstitute.hellbender.tools.spark.sv.utils.SVFastqUtils;
 import org.broadinstitute.hellbender.tools.spark.sv.utils.SVIntervalLocator;
 import org.broadinstitute.hellbender.tools.spark.sv.utils.SVIntervalTree;
-import org.broadinstitute.hellbender.tools.walkers.bqsr.BaseRecalibrator;
-import org.broadinstitute.hellbender.utils.MathUtils;
-import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.iterators.ArrayUtils;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
@@ -19,7 +16,6 @@ import org.broadinstitute.hellbender.utils.read.SAMRecordToGATKReadAdapter;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Spliterator;
@@ -32,7 +28,7 @@ import java.util.stream.StreamSupport;
  * Represent a template sequence as reconstructed from the corresponding
  * fragments such as reads pairs.
  */
-public class Template implements Serializable {
+public final class Template implements Serializable {
 
     private static final long serialVersionUID = 1L;
 

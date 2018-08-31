@@ -9,6 +9,7 @@ import org.broadinstitute.hellbender.tools.spark.sv.discovery.alignment.Alignmen
 import org.broadinstitute.hellbender.utils.Nucleotide;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
+import org.broadinstitute.hellbender.utils.bwa.BwaMemAlignmentUtils;
 import org.broadinstitute.hellbender.utils.read.GATKRead;
 
 import java.io.IOException;
@@ -80,11 +81,18 @@ public class ArraySVHaplotype extends AbstractSVHaplotype {
         System.arraycopy(bases, offset, dest, destOffset, length);
     }
 
+    private SingleSequenceReferenceAligner<byte[], List<AlignmentInterval>> composeAligner() {
+        return new SingleSequenceReferenceAligner<>(name, bases,
+                Collections::singletonList,
+                (input, bwaList, contigByIndex) ->
+                    BwaMemAlignmentUtils.toAlignmentIntervals(bwaList.get(0), contigByIndex::get, input.length));
+    }
+
     public <T> List<List<AlignmentInterval>> align(final Iterable<T> input, Function<T, byte[]> basesOf) {
-        try (final SingleContigReferenceAligner aligner = new SingleContigReferenceAligner(name, bases)) {
+        try (final SingleSequenceReferenceAligner<byte[], List<AlignmentInterval>> aligner = composeAligner()) {
             final List<byte[]> seqs = Utils.stream(input).map(basesOf).collect(Collectors.toList());
             aligner.getAligner().setMinSeedLengthOption(6);
-            return aligner.align(seqs);
+            return aligner.<List<AlignmentInterval>>align(seqs);
         } catch (final RuntimeException ex) {
             throw new GATKException("could not create aligner", ex);
         }

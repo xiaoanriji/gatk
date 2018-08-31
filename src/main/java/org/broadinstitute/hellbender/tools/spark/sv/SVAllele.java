@@ -9,30 +9,30 @@ import java.util.stream.Stream;
 /**
  * Created by valentin on 4/27/17.
  */
-public enum StructuralVariantAllele {
+public enum SVAllele {
     INS, DEL, DUP, INV;
 
     private final Allele allele;
 
     @SuppressWarnings("RedundantTypeArguments")
-    private static final Map<String, StructuralVariantAllele> instanceByName =
-            Stream.of(values()).collect(Collectors.toMap(Enum<StructuralVariantAllele>::name, v -> v));
+    private static final Map<String, SVAllele> instanceByName =
+            Stream.of(values()).collect(Collectors.toMap(Enum<SVAllele>::name, v -> v));
 
     /**
-     * Creates a new {@link StructuralVariantAllele} instance.
+     * Creates a new {@link SVAllele} instance.
      */
-    StructuralVariantAllele() {
+    SVAllele() {
         allele = Allele.create("<" + name() + ">", false);
     }
 
     /**
-     * Returns the {@link StructuralVariantAllele} instance that corresponds to a given allele.
+     * Returns the {@link SVAllele} instance that corresponds to a given allele.
      * @param allele the query allele.
      * @throws NullPointerException if the input allele is {@code null}.
      * @throws IllegalArgumentException if the input allele does not represent a known variant allele.
      * @return never {@code null}.
      */
-    public static StructuralVariantAllele valueOf(final Allele allele) {
+    public static SVAllele valueOf(final Allele allele) {
         if (allele == null) {
             throw new IllegalArgumentException();
         } else if (!allele.isSymbolic()) {
@@ -42,7 +42,7 @@ public enum StructuralVariantAllele {
             if (!text.startsWith("<") || !text.endsWith(">")) {
                 throw new IllegalArgumentException("unexpected symbolic allele name: " + text);
             } else {
-                final StructuralVariantAllele result = instanceByName.get(text.substring(1, text.length() - 1));
+                final SVAllele result = instanceByName.get(text.substring(1, text.length() - 1));
                 if (result == null) {
                     throw new IllegalArgumentException();
                 } else {

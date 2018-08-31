@@ -1,11 +1,8 @@
 package org.broadinstitute.hellbender.cmdline.argumentcollections;
 
-import org.broadinstitute.hellbender.utils.gcs.BucketUtils;
 import org.broadinstitute.hellbender.utils.io.IOUtils;
 
-import java.io.File;
 import java.io.Serializable;
-import java.net.URL;
 import java.nio.file.Path;
 
 /**

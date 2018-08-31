@@ -75,6 +75,9 @@ public final class RealignmentScore {
      */
     public final int indelLengthSum;
 
+    /**
+     * Indicate the strand the record is supposed to align too.
+     */
     public final Strand strand;
 
     /**
@@ -131,7 +134,7 @@ public final class RealignmentScore {
         final int misMatches = ParamUtils.isPositiveOrZeroInteger(parts[nextIdx++], "misMatches is not a valid positive integer");
         final int indels = ParamUtils.isPositiveOrZeroInteger(parts[nextIdx++], "indels is not a valid positive integer");
         final int indelLenghts = ParamUtils.isPositiveOrZeroInteger(parts[nextIdx++], "indel-length is not a valid positive integer");
-        final Strand strand = Strand.decode(parts[nextIdx]);
+        final Strand strand     = Strand.decode(parts[nextIdx]);
         return new RealignmentScore(parameters, matches, misMatches, indels, indelLenghts, strand);
     }
 

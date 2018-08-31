@@ -46,8 +46,6 @@ import static org.testng.Assert.assertEquals;
  */
 public final class UtilsUnitTest extends GATKBaseTest {
 
-
-
     @Test
     public void testForceJVMLocaleToUSEnglish() {
 

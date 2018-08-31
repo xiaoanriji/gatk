@@ -116,14 +116,14 @@ import java.util.stream.Stream;
  *     (--emit-stratified-likelihoods and --emit-stratified-allele-depths arguments).
  * </p>
  *
- * <h3>Diagnosys output alignment</h3>
+ * <h3>Diagnosis output alignment</h3>
  * <p>
  *     In addition, you can request an output alignment file that encloses for each genotyped variant
  *     the reconstructed haplotypes, overlapping contigs and read pairs involved in the genotyping
- *     process (-bamout --output-diagnosys-alignment argument).
+ *     process (-bamout --output-diagnosis-alignment argument).
  * </p>
  * <p>
- *     Nonetheless, this output is provided for diagnosys/debugging purposes and may add to much
+ *     Nonetheless, this output is provided for diagnosis/debugging purposes and may add to much
  *     run-time so is only recommended to be use when analyzing small regions.
  * </p>
  * <p>
@@ -186,7 +186,7 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
     public static final String CTG_FILE_SHORT_NAME = "assemblies";
     public static final String CTG_FILE_FULL_NAME = "assembled-contigs-file";
     public static final String OUTPUT_ALIGNMENT_SHORT_NAME = "bamout";
-    public static final String OUTPUT_ALIGNMENT_FULL_NAME = "output-diagnosys-alignment";
+    public static final String OUTPUT_ALIGNMENT_FULL_NAME = "output-diagnosis-alignment";
     public static final String SHARD_SIZE_SHORT_NAME = "shard";
     public static final String SHARD_SIZE_FULL_NAME = "shard-size";
     public static final String INSERT_SIZE_DISTR_SHORT_NAME = "ins-size-dist";
@@ -372,55 +372,58 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
         setUp(ctx);
 
         final SAMSequenceDictionary dictionary = getReferenceSequenceDictionary();
-        final SVIntervalLocator svIntervalLocator = SVIntervalLocator.of(dictionary);
-        final Broadcast<SAMSequenceDictionary> dictionaryBroadcast = ctx.broadcast(dictionary);
-        final Broadcast<SVIntervalLocator> svLocatorBroadcast = ctx.broadcast(svIntervalLocator);
-        final Broadcast<InsertSizeDistribution> insertSizeDistributionBroadcast = ctx.broadcast(insertSizeDistribution);
-
-        final VCFHeader outputVCFHeader = composeOutputVCFHeader(VariantsSparkSource.getHeader(variantArguments.variantFiles.get(0).getFeaturePath()), sampleName, emitGenotypingPerformanceStats,
-                emitStratifiedLikelihoods, emitStratifiedAlleleDepths);
-        final String sampleName = outputVCFHeader.getSampleNamesInOrder().get(0);
-        final String referenceFilePath = referenceArguments.getReferenceFileName();
-
         final List<SimpleInterval> intervals = this.hasUserSuppliedIntervals() ? getIntervals()
                 : IntervalUtils.getAllIntervalsForReference(dictionary);
 
-        final TraversalParameters contigAlignmentsTraversalParameters = composeContigTraversalParameters(ctx, contigsSource,
-                contigsFile, referenceFilePath, parallelism, intervals, dictionaryBroadcast, svLocatorBroadcast, 1000); // 1000bp padding.
+        try (final SparkSharder sharder = new SparkSharder(ctx, dictionary, intervals, shardSize, 0)) {
 
-        final SparkSharder sharder = new SparkSharder(ctx, dictionary, intervals, shardSize, 0);
+            final SVIntervalLocator svIntervalLocator = SVIntervalLocator.of(dictionary);
+            final Broadcast<SAMSequenceDictionary> dictionaryBroadcast = ctx.broadcast(dictionary);
+            final Broadcast<SVIntervalLocator> svLocatorBroadcast = ctx.broadcast(svIntervalLocator);
+            final Broadcast<InsertSizeDistribution> insertSizeDistributionBroadcast = ctx.broadcast(insertSizeDistribution);
 
-        final JavaRDD<SVContext> variants = variantsSource.getParallelVariantContexts(
-                variantArguments.variantFiles.get(0).getFeaturePath(), getIntervals())
-                .map(SVContext::of).filter(GenotypeStructuralVariantsSpark::structuralVariantAlleleIsSupported);
+            final VCFHeader outputVCFHeader = composeOutputVCFHeader(VariantsSparkSource.getHeader(variantArguments.variantFiles.get(0).getFeaturePath()), sampleName, emitGenotypingPerformanceStats,
+                    emitStratifiedLikelihoods, emitStratifiedAlleleDepths);
+            final String sampleName = outputVCFHeader.getSampleNamesInOrder().get(0);
+            final String referenceFilePath = referenceArguments.getReferenceFileName();
 
-        final JavaRDD<GATKRead> contigAlignments = contigsSource
-                .getParallelReads(contigsFile, referenceArguments.getReferenceFileName(), contigAlignmentsTraversalParameters);
 
-        final JavaPairRDD<SVContext, List<SVContig>> variantsAndContigs = composeOverlappingContigRecordsPerVariant(variants, contigAlignments, sharder, dictionaryBroadcast, paddingSize, parallelism);
-        final JavaPairRDD<SVContext, List<SVHaplotype>> variantsAndHaplotypes = composeHaplotypes(variantsAndContigs, referenceFilePath, paddingSize);
+            final TraversalParameters contigAlignmentsTraversalParameters = composeContigTraversalParameters(ctx, contigsSource,
+                    contigsFile, referenceFilePath, parallelism, intervals, dictionaryBroadcast, svLocatorBroadcast, 1000); // 1000bp padding.
 
-        final JavaRDD<SVGenotypingContext> genotypingContexts = composeGenotypingContexts(dictionaryBroadcast, svLocatorBroadcast, insertSizeDistributionBroadcast, variantsAndHaplotypes, sampleName);
 
-        final SAMFileHeader outputAlignmentHeader = outputAlignmentFile == null ? null : composeOutputHeader(getReferenceSequenceDictionary(), sampleName);
-        final JavaRDD<Call> calls = makeACall(genotypingContexts, outputAlignmentHeader, ctx);
-        SVVCFWriter.writeVCF(outputFile, referenceArguments.getReferenceFileName(), calls.map(c -> c.context), outputVCFHeader, logger);
-        if (outputAlignmentFile != null) {
-            try (final SAMFileWriter outputAlignmentWriter = BamBucketIoUtils.makeWriter(outputAlignmentFile, outputAlignmentHeader, true)) {
-                calls.map(call -> call.outputAlignmentRecords)
-                        .filter(records -> records != null && !records.isEmpty())
-                        .flatMap(List::iterator)
-                        .mapPartitionsToPair(it -> {
-                            final SVIntervalLocator locator = svLocatorBroadcast.getValue();
-                            return Utils.map(it, vv -> new Tuple2<>(
+            final JavaRDD<SVContext> variants = variantsSource.getParallelVariantContexts(
+                    variantArguments.variantFiles.get(0).getFeaturePath(), getIntervals())
+                    .map(SVContext::of).filter(GenotypeStructuralVariantsSpark::structuralVariantAlleleIsSupported);
+
+            final JavaRDD<GATKRead> contigAlignments = contigsSource
+                    .getParallelReads(contigsFile, referenceArguments.getReferenceFileName(), contigAlignmentsTraversalParameters);
+
+            final JavaPairRDD<SVContext, List<SVContig>> variantsAndContigs = composeOverlappingContigRecordsPerVariant(variants, contigAlignments, sharder, dictionaryBroadcast, paddingSize, parallelism);
+            final JavaPairRDD<SVContext, List<SVHaplotype>> variantsAndHaplotypes = composeHaplotypes(variantsAndContigs, referenceFilePath, paddingSize);
+
+            final JavaRDD<SVGenotypingContext> genotypingContexts = composeGenotypingContexts(dictionaryBroadcast, svLocatorBroadcast, insertSizeDistributionBroadcast, variantsAndHaplotypes, sampleName);
+
+            final SAMFileHeader outputAlignmentHeader = outputAlignmentFile == null ? null : composeOutputHeader(getReferenceSequenceDictionary(), sampleName);
+            final JavaRDD<Call> calls = makeACall(genotypingContexts, outputAlignmentHeader, ctx);
+            SVVCFWriter.writeVCF(outputFile, referenceArguments.getReferenceFileName(), calls.map(c -> c.context), outputVCFHeader, logger);
+            if (outputAlignmentFile != null) {
+                try (final SAMFileWriter outputAlignmentWriter = BamBucketIoUtils.makeWriter(outputAlignmentFile, outputAlignmentHeader, true)) {
+                    calls.map(call -> call.outputAlignmentRecords)
+                            .filter(records -> records != null && !records.isEmpty())
+                            .flatMap(List::iterator)
+                            .mapPartitionsToPair(it -> {
+                                final SVIntervalLocator locator = svLocatorBroadcast.getValue();
+                                return Utils.map(it, vv -> new Tuple2<>(
                                         locator.toSVInterval(vv), vv));
-                        })
-                        .sortByKey()
-                        .values()
-                        .toLocalIterator()
-                        .forEachRemaining(outputAlignmentWriter::addAlignment);
-            } catch (final Exception ex) {
-                throw new UserException.CouldNotCreateOutputFile(outputAlignmentFile, ex);
+                            })
+                            .sortByKey()
+                            .values()
+                            .toLocalIterator()
+                            .forEachRemaining(outputAlignmentWriter::addAlignment);
+                } catch (final Exception ex) {
+                    throw new UserException.CouldNotCreateOutputFile(outputAlignmentFile, ex);
+                }
             }
         }
         tearDown(ctx);
@@ -507,7 +510,9 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
             return new TraversalParameters(IntervalUtils.getAllIntervalsForReference(dictionary), false);
         } else {
             final TraversalParameters firstPassTraversalParameters = new TraversalParameters(intervals, false);
-            final List<SimpleInterval> additionalIntervals = firstScanForMissingPrimaryContigAlignments(ctx, contigsSource, contigsSourcePath, referenceFilePath, parallelism, intervals, percentage, firstPassTraversalParameters, svIntervalLocatorBroadcast);
+            final List<SimpleInterval> additionalIntervals = firstScanForMissingPrimaryContigAlignments(ctx, contigsSource,
+                    contigsSourcePath, referenceFilePath, intervals, percentage,
+                    firstPassTraversalParameters, svIntervalLocatorBroadcast);
             if (additionalIntervals.isEmpty()) {
                 logger.info("No additional interval are need to look for primary contig alignments");
                 return firstPassTraversalParameters;
@@ -564,7 +569,6 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
             final ReadsSparkSource contigsSource,
             final String contigsSourcePath,
             final String referenceFilePath,
-            final int parallelism,
             final List<SimpleInterval> intervals,
             final String percentage,
             final TraversalParameters firstPassTraversalParameters,
@@ -905,7 +909,7 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
                             stratifiedLikelihoods.put(GATKSVVCFConstants.TEMPLATE_MAPPING_LIKELIHOODS, splitsReadlikelihoods);
                             stratifiedLikelihoods.put(GATKSVVCFConstants.INSERT_SIZE_LIKELIHOODS, insertSizeLikelihoods);
                             stratifiedLikelihoods.put(GATKSVVCFConstants.DISCORDANT_PAIR_ORIENTATION_LIKELIHOODS, discordantOrientationLikelihoods);
-                            return Call.of(outputBuilder.make(), composeDiagnosysReads(context, outputAlignmentHeader, dictionary, realignmentScoreArguments, relevantIntervals, totalLikelihoods, stratifiedLikelihoods, informativePhredLikelihoodDifferenceThreshold));
+                            return Call.of(outputBuilder.make(), composeDiagnosisReads(context, outputAlignmentHeader, dictionary, realignmentScoreArguments, relevantIntervals, totalLikelihoods, stratifiedLikelihoods, informativePhredLikelihoodDifferenceThreshold));
                         }
                     }).iterator();
             imageCache.closeInstanceAndDeleteFiles();
@@ -913,7 +917,7 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
         });
     }
 
-    private static List<SAMRecord> composeDiagnosysReads(final SVGenotypingContext context, final SAMFileHeader outputAlignmentHeader, final SAMSequenceDictionary dictionary,
+    private static List<SAMRecord> composeDiagnosisReads(final SVGenotypingContext context, final SAMFileHeader outputAlignmentHeader, final SAMSequenceDictionary dictionary,
                                                          final RealignmentScoreParameters parameters,
                                                          final List<SimpleInterval> relevantIntervals,
                                                          final ReadLikelihoods<SVGenotypingContext.Allele> totalLikelihoods,
@@ -1275,7 +1279,8 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
         }
     }
 
-    private static void setMissingAlignmentScores(final RealignmentScoreParameters penalties, List<Template> templates, TemplateMappingTable scoreTable) {
+    private static void setMissingAlignmentScores(final RealignmentScoreParameters penalties, final List<Template> templates,
+                                                  final TemplateMappingTable scoreTable) {
         scoreTable.calculateBestMappingScores();
         for (int t = 0; t < templates.size(); t++) {
             final double worstFirstAlignmentScore = scoreTable.getWorstAlignmentScore(t, 0);
@@ -1412,8 +1417,6 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
         final File imageFile = imageCreator.apply(imageName, haplotype.getBases());
         final BwaMemIndex index = imageCache.getInstance(imageFile.toString());
         final BwaMemAligner aligner = new BwaMemAligner(index);
-        //aligner.alignPairs();
-        //aligner.dontInferPairEndStats();
         return aligner;
     }
 

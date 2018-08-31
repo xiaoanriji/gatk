@@ -31,7 +31,7 @@ import java.util.OptionalDouble;
 public class SVContig extends ArraySVHaplotype {
 
     /**
-     * @return {@link Double#NaN} if there is no alignment againts the reference haplotype.
+     * @return {@link Double#NaN} if there is no alignment against the reference haplotype.
      */
     public double getReferenceHaplotypeScore() {
         return referenceAlignmentScore == null ? Double.NaN : referenceAlignmentScore.getLog10Prob();
@@ -76,7 +76,7 @@ public class SVContig extends ArraySVHaplotype {
         final String variantId = variant.getUniqueID();
         final SimpleInterval location = primary.referenceSpan.getStartInterval();
 
-        return new SVContig(contig.getContigName(), location, variantId, contig.getContigSequence(), contig.getAlignments(), null, null, null, null, mappingQuality, null);
+        return new SVContig(contig.getContigName(), location, variantId, contig.getContigSequence(), contig.getAlignments(), null, null, null, null, mappingQuality);
     }
 
     public static SVContig of(final GATKRead read, final RealignmentScoreParameters scoreParameters) {
@@ -88,7 +88,7 @@ public class SVContig extends ArraySVHaplotype {
         final RealignmentScore altScore = getOptionalAlignmentScore(read, GenotypeStructuralVariantsSpark.ALTERNATIVE_SCORE_TAG, scoreParameters);
         final SimpleInterval location = new SimpleInterval(read.getAssignedContig(), read.getAssignedStart(), read.getAssignedStart());
         final int mappingQuality = read.getMappingQuality();
-        return new SVContig(read.getName(), location, variantId, read.getBases(), AlignmentInterval.decodeList(read.getAttributeAsString(SAMTag.SA.name())), refAln, refScore, altAln, altScore, mappingQuality, qual);
+        return new SVContig(read.getName(), location, variantId, read.getBases(), AlignmentInterval.decodeList(read.getAttributeAsString(SAMTag.SA.name())), refAln, refScore, altAln, altScore, mappingQuality);
     }
 
     public void setReferenceHaplotypeAlignment(final List<AlignmentInterval> intervals, final RealignmentScore score) {
@@ -124,13 +124,13 @@ public class SVContig extends ArraySVHaplotype {
 
     private static List<AlignmentInterval> getAlignmentIntervalsAttribute(final GATKRead read, final String tag) {
         final Optional<String> str = ReadUtils.getOptionalStringAttribute(read, tag);
-        return str.isPresent() ? AlignmentInterval.decodeList(str.get()) : null;
+        return str.map(AlignmentInterval::decodeList).orElse(null);
     }
 
 
     public SVContig(final String name, final Locatable loc, final String variantId,
                     final byte[] bases, final List<AlignmentInterval> originalReferenceAlignment, final List<AlignmentInterval> refAln, final RealignmentScore refScore,
-                    final List<AlignmentInterval> altAln, final RealignmentScore altScore, final int mappingQuality, final Double qual) {
+                    final List<AlignmentInterval> altAln, final RealignmentScore altScore, final int mappingQuality) {
         super(name, originalReferenceAlignment, bases, variantId, SimpleInterval.of(loc), mappingQuality, true);
         if (isReference() || isAlternative()) {
             throw new IllegalArgumentException("invalid assembled contig name, must not be reference or alternative like: " + name);

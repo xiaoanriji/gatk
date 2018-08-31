@@ -109,6 +109,5 @@ public class ShardBoundary implements Locatable, Serializable {
         return String.format("%s:%d[%d-%d]%d", getContig(),
                 paddedInterval.getStart(), interval.getStart(),
                 interval.getEnd(), paddedInterval.getEnd());
-
     }
 }

@@ -22,7 +22,7 @@ import java.util.OptionalInt;
  * Contains information as to how a template maps against a
  * haplotype or contig.
  */
-public class TemplateMapping implements Serializable {
+public final class TemplateMapping implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -60,7 +60,7 @@ public class TemplateMapping implements Serializable {
                     = sortLeftRightAlignments(firstIntervals, secondIntervals);
             final Pair<Strand, Strand> strands = new ImmutablePair<>(
                     strand(sortedAlignments.getLeft()), strand(sortedAlignments.getRight()));
-            final ReadPairOrientation orientation = ReadPairOrientation.fromStrands(strands.getLeft(), strands.getRight());
+            final ReadPairOrientation orientation = ReadPairOrientation.of(strands.getLeft(), strands.getRight());
             if (orientation.isProper()) {
                 return new TemplateMapping(score(realignmentScoreParameters, haplotype, firstBases, firstIntervals),
                                                       score(realignmentScoreParameters, haplotype, secondBases, secondIntervals), clippedStart(sortedAlignments.getLeft()), clippedEnd(sortedAlignments.getRight()),

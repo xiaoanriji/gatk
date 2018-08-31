@@ -119,7 +119,6 @@ public final class ReadLikelihoodsUnitTest {
 
     }
 
-
     @Test(dataProvider = "dataSets")
     public void testSum0(final String[] samples, final Allele[] alleles, final Map<String, List<GATKRead>> reads) {
         final SampleList sampleList = new IndexedSampleList(samples);
@@ -171,7 +170,6 @@ public final class ReadLikelihoodsUnitTest {
                 }
             }
         }
-
     }
 
     @DataProvider(name ="dataSetsWithNumber")
@@ -805,7 +803,6 @@ public final class ReadLikelihoodsUnitTest {
 
     private SAMFileHeader SAM_HEADER = ArtificialReadUtils.createArtificialSamHeader(10, 0, 1000);
     final GenomeLocParser   locParser = new GenomeLocParser(SAM_HEADER.getSequenceDictionary());
-
 
     private int[][] READ_COUNTS = {
             {},

@@ -12,7 +12,7 @@ import java.io.IOException;
  */
 public interface ReferenceSource {
 
-    ReferenceBases getReferenceBases(final SimpleInterval interval) throws IOException;
+    ReferenceBases getReferenceBases(SimpleInterval interval) throws IOException;
 
     SAMSequenceDictionary getReferenceSequenceDictionary(SAMSequenceDictionary optReadSequenceDictionaryToMatch) throws IOException;
 

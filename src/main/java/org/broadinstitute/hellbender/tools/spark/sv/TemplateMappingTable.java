@@ -11,7 +11,7 @@ import java.util.stream.IntStream;
 /**
  * Created by valentin on 5/18/17.
  */
-public class TemplateMappingTable implements Serializable {
+public final class TemplateMappingTable implements Serializable {
 
     private static final long serialVersionUID = 1L;
 

@@ -5,17 +5,10 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.google.common.annotations.VisibleForTesting;
-import htsjdk.samtools.*;
-import htsjdk.samtools.util.SequenceUtil;
-import htsjdk.tribble.annotation.Strand;
-import org.broadinstitute.hellbender.tools.spark.sv.utils.SvCigarUtils;
-import org.broadinstitute.hellbender.utils.SimpleInterval;
-import org.broadinstitute.hellbender.utils.Utils;
-import org.broadinstitute.hellbender.utils.bwa.BwaMemAlignment;
-import org.broadinstitute.hellbender.utils.read.CigarUtils;
-import org.broadinstitute.hellbender.utils.read.GATKRead;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+
 
 /**
  * Holding necessary information about a local assembly for use in SV discovery.

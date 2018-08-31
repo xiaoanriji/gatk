@@ -5,20 +5,13 @@ import org.broadinstitute.hellbender.tools.spark.sv.evidence.TemplateFragmentOrd
 import org.broadinstitute.hellbender.tools.spark.sv.utils.SVFastqUtils;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.gcs.BucketUtils;
-import org.broadinstitute.hellbender.utils.iterators.ArrayUtils;
+import org.broadinstitute.hellbender.utils.io.IOUtils;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
-import java.io.File;
 import java.io.Serializable;
-import java.net.URI;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.WeakHashMap;
-import java.util.stream.Collectors;
 
 /**
  * Represents a collection of assembly files  of file in the assembly collection
@@ -27,13 +20,13 @@ public class AssemblyCollection implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private final String fastqDir;
+    private final String location;
     private final String fastqFileFormat;
 
     private final WeakHashMap<Integer, List<Template>> templatesById;
 
-    public AssemblyCollection(final String fastqDir, final String fastqFileFormat) {
-        this.fastqDir = Utils.nonNull(fastqDir);
+    public AssemblyCollection(final String location, final String fastqFileFormat) {
+        this.location = Utils.nonNull(location);
         this.fastqFileFormat = Utils.nonNull(fastqFileFormat);
         this.templatesById = new WeakHashMap<>(10);
     }
@@ -42,13 +35,13 @@ public class AssemblyCollection implements Serializable {
         ParamUtils.isPositiveOrZero(assemblyNumber, "the assembly number must be 0 or greater");
         // Is important to create a separate key Integer object so that WeakHash entry can be re-claimed.
         // Auto-boxing may reuse same instance for numbers close enough to 0 (see {@link Integer#valueOf} for details).
-        final Integer key = new Integer(assemblyNumber);
-        return templatesById.computeIfAbsent(key, this::readTemplates);
+        @SuppressWarnings("UnnecessaryBoxing") final Integer key = new Integer(assemblyNumber);
+        return templatesById.computeIfAbsent(assemblyNumber, this::readTemplates);
     }
 
     private List<Template> readTemplates(final int assemblyNumber) {
         Utils.nonNull(assemblyNumber);
-        final String path = fastqDir + "/" + String.format(fastqFileFormat, assemblyNumber);
+        final String path = IOUtils.getPath(location).resolve(String.format(fastqFileFormat, assemblyNumber)).toString();
         final List<Template> result = new ArrayList<>();
         if (!BucketUtils.fileExists(path)) {
             throw new UserException.CouldNotReadInputFile(path, "missing input file for assembly number " + assemblyNumber);
@@ -79,5 +72,4 @@ public class AssemblyCollection implements Serializable {
         }
         return result;
     }
-
 }
