@@ -41,7 +41,7 @@ public final class SimpleInterval implements Locatable, Serializable {
     }
 
      /**
-      * Create a singe based interval
+      * Create a single base interval
       */
      public SimpleInterval(final String contig, final int position) {
          this(contig, position, position);
@@ -80,11 +80,15 @@ public final class SimpleInterval implements Locatable, Serializable {
 
      /**
       * Returns a {@link SimpleInterval} that represent the interval that a locatable extends.
+      * <p>
+      *     The difference with just using {@link #SimpleInterval(Locatable)} is that method will avoid
+      *     the instantiation of new object if the input locatable happens to be a {@link SimpleInterval} instance.
+      * </p>
       * @param locatable the input locatable.
       * @throws IllegalArgumentException if {@code locatable} is not valid as described in {@link #SimpleInterval(Locatable)}
       * @return never {@code null}.
       */
-     public static SimpleInterval of(final Locatable locatable) {
+     public static SimpleInterval valueOf(final Locatable locatable) {
          Utils.nonNull(locatable);
          if (locatable instanceof SimpleInterval) {
              return (SimpleInterval) locatable;
@@ -374,9 +378,5 @@ public final class SimpleInterval implements Locatable, Serializable {
          } else {
              return new SimpleInterval(contig, start, start);
          }
-     }
-
-     public boolean contains(int position) {
-         return position >= start && position <= end;
      }
  }

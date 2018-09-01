@@ -11,6 +11,9 @@ import org.apache.commons.collections4.IteratorUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.Level;
 import org.broadinstitute.hellbender.GATKBaseTest;
+import org.broadinstitute.hellbender.tools.spark.sv.utils.SVInterval;
+import org.broadinstitute.hellbender.tools.spark.sv.utils.SVIntervalTree;
+import org.broadinstitute.hellbender.utils.collections.IntervalsSkipListOneContig;
 import org.broadinstitute.hellbender.utils.io.IOUtils;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -76,6 +79,40 @@ public final class UtilsUnitTest extends GATKBaseTest {
 
     private <T> void check(List<? extends Iterable<T>> input, List<T> expected) {
         assertEquals(Lists.newArrayList(Utils.concatIterators(input.iterator())), expected);
+    }
+
+    @Test
+    public void testIterableConcat() {
+        Assert.assertEquals(
+                Utils.concat(ImmutableList.of("A", "B"), ImmutableList.of("C", "D")), ImmutableList.of("A", "B", "C", "D"));
+        Assert.assertEquals(
+                Utils.concat(ImmutableList.of("A", "B"), ImmutableList.of("B", "A")), ImmutableList.of("A", "B", "B", "A"));
+        Assert.assertEquals(
+                Utils.concat(ImmutableList.of(), ImmutableList.of()), ImmutableList.of());
+        Assert.assertEquals(
+                Utils.concat(ImmutableList.of(), ImmutableList.of("B", "A")), ImmutableList.of("B", "A"));
+        Assert.assertEquals(
+                Utils.concat(ImmutableList.of("A", "B"), ImmutableList.of()), ImmutableList.of("A", "B"));
+    }
+
+    @Test
+    public void testIterableSize() {
+        Assert.assertEquals(Utils.size(ImmutableList.of()), 0);
+        Assert.assertEquals(Utils.size(ImmutableList.of("A")), 1);
+        Assert.assertEquals(Utils.size(ImmutableList.of("A", "B", "C")), 3);
+        Assert.assertEquals(Utils.size(new SVIntervalTree<>()), 0);
+        final SVIntervalTree<String> subJect = new SVIntervalTree<>();
+        subJect.put(new SVInterval(1, 100, 200), "A");
+        subJect.put(new SVInterval(1, 100, 300), "B");
+        Assert.assertEquals(Utils.size(subJect), 2);
+    }
+
+    @Test
+    public void testIterableIsEmpty() {
+        Assert.assertTrue(Utils.isEmpty(ImmutableList.of()));
+        Assert.assertFalse(Utils.isEmpty(ImmutableList.of("A")));
+        Assert.assertFalse(Utils.isEmpty(ImmutableList.of("A", "B", "C")));
+        Assert.assertFalse(Utils.isEmpty(Collections.singletonList(null)));
     }
 
     @Test

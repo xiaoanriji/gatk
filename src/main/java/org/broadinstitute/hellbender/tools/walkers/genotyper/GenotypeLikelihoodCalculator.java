@@ -111,11 +111,10 @@ public final class GenotypeLikelihoodCalculator {
         log10RelativeAlleleFrequency = null;
     }
 
-
-        /**
-         * Return a copy of the current relative frequencies to be applied for alleles in heterozygous genotype likelihoods.
-         * @return might be {@code null} indicating the default (all equal) frequencies are to be used.
-         */
+    /**
+     * Returns a copy of the current relative frequencies to be applied for alleles in heterozygous genotype likelihoods.
+     * @return might be {@code null} indicating the default (all equal) frequencies are to be used.
+     */
     public double[] getRelativeAlleleFrequency() {
         return relativeAlleleFrequency != null ? relativeAlleleFrequency.clone() : null;
     }

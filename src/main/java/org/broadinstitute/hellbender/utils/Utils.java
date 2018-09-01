@@ -1100,37 +1100,21 @@ public final class Utils {
 
 
     /**
-     * Returns a unmodifiable collection that contains the elements of the two input collections
-     * in the same order.
+     * Returns a new iterable that goes over two other iterables in order.
+     *
      * @param head the first input collection.
      * @param tail the second input collection.
      * @param <T> the element type.
-     * @return
+     * @return never {@code null}, but perhaps empty.
      */
-    public static <T> Collection<T> concat(final Collection<T> head, final Collection<T> tail) {
-        if ((head == null || head.isEmpty()) && (tail == null || tail.isEmpty())) {
-            return Collections.emptyList();
-        } else if ((head == null || head.isEmpty())) {
-            return Collections.unmodifiableCollection(tail);
-        } else if ((head == null || head.isEmpty())) {
-            return Collections.unmodifiableCollection(head);
+    public static <T> Iterable<? extends T> concat(final Iterable<? extends T> head,
+                                                   final Iterable<? extends T> tail) {
+        if (Utils.isEmpty(head)) {
+            return Utils.nonNull(tail);
+        } else if (Utils.isEmpty(tail)) {
+            return Utils.nonNull(head);
         } else {
-            return new AbstractCollection<T>() {
-                @Override
-                public Iterator<T> iterator() {
-                    return concatIterators(Arrays.asList(head, tail).iterator());
-                }
-
-                @Override
-                public int size() {
-                    return head.size() + tail.size();
-                }
-
-                @Override
-                public boolean contains(final Object obj) {
-                    return head.contains(obj) || tail.contains(obj);
-                }
-            };
+            return (Iterable<T>) () -> Iterators.concat(head.iterator(), tail.iterator());
         }
     }
 
@@ -1422,9 +1406,22 @@ public final class Utils {
         Utils.nonNull(elements);
         // Considerable speed-up for most {@link Collection} implementations:
         if (elements instanceof Collection) {
+            ((Collection<?>) elements).stream().spliterator().characteristics();
             return ((Collection)elements).size();
         } else {
-            return (int) Utils.stream(elements).count();
+            final Spliterator<?> spliterator = elements.spliterator();
+            final long estimatedSize = spliterator.getExactSizeIfKnown();
+            if (estimatedSize >= 0) {
+                return (int) estimatedSize;
+            } else {
+                // fail-over general approach using an iterator:
+                final Iterator<?> it = elements.iterator();
+                int result = 0;
+                while (it.hasNext()) {
+                    it.next();
+                }
+                return result;
+            }
         }
     }
 
@@ -1435,9 +1432,9 @@ public final class Utils {
      */
     public static boolean isEmpty(final Iterable<?> elements) {
         Utils.nonNull(elements);
-        if (elements instanceof Collection) {
+        if (elements instanceof Collection) { // a short cut that will do the job it most cases.
             return ((Collection)elements).isEmpty();
-        } else {
+        } else { // fail-over general approach using an iterator.
             return !elements.iterator().hasNext();
         }
     }

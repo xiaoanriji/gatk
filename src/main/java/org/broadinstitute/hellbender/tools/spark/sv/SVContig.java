@@ -80,7 +80,6 @@ public class SVContig extends ArraySVHaplotype {
     }
 
     public static SVContig of(final GATKRead read, final RealignmentScoreParameters scoreParameters) {
-        final Double qual = read.getAttributeAsDouble(GenotypeStructuralVariantsSpark.HAPLOTYPE_QUAL_TAG);
         final String variantId = getMandatoryAttribute(read, GenotypeStructuralVariantsSpark.VARIANT_CONTEXT_TAG);
         final List<AlignmentInterval> refAln = getAlignmentIntervalsAttribute(read, GenotypeStructuralVariantsSpark.REFERENCE_ALIGNMENT_TAG);
         final List<AlignmentInterval> altAln = getAlignmentIntervalsAttribute(read, GenotypeStructuralVariantsSpark.ALTERNATIVE_ALIGNMENT_TAG);
@@ -131,7 +130,7 @@ public class SVContig extends ArraySVHaplotype {
     public SVContig(final String name, final Locatable loc, final String variantId,
                     final byte[] bases, final List<AlignmentInterval> originalReferenceAlignment, final List<AlignmentInterval> refAln, final RealignmentScore refScore,
                     final List<AlignmentInterval> altAln, final RealignmentScore altScore, final int mappingQuality) {
-        super(name, originalReferenceAlignment, bases, variantId, SimpleInterval.of(loc), mappingQuality, true);
+        super(name, originalReferenceAlignment, bases, variantId, SimpleInterval.valueOf(loc), mappingQuality, true);
         if (isReference() || isAlternative()) {
             throw new IllegalArgumentException("invalid assembled contig name, must not be reference or alternative like: " + name);
         }

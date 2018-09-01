@@ -91,30 +91,6 @@ public final class Template implements Serializable {
 
         public List<AlignmentInterval> alignmentIntervals() { return this.mapping; }
 
-        public GATKRead toUnmappedRead(final SAMFileHeader header, final boolean paired) {
-            final SAMRecord record = new SAMRecord(header);
-            record.setReadName(name);
-            record.setBaseQualities(encodeQuals());
-            record.setReadBases(bases);
-            record.setReadUnmappedFlag(true);
-            if (paired) {
-                record.setReadPairedFlag(true);
-                record.setMateUnmappedFlag(true);
-                record.setFirstOfPairFlag(number == TemplateFragmentOrdinal.PAIRED_FIRST);
-                record.setSecondOfPairFlag(number == TemplateFragmentOrdinal.PAIRED_SECOND);
-            }
-            record.setValidationStringency(ValidationStringency.STRICT);
-            return SAMRecordToGATKReadAdapter.headerlessReadAdapter(record);
-        }
-
-        private byte[] encodeQuals() {
-            final byte[] result = new byte[qualities.length];
-            for (int i = 0; i < result.length; i++) {
-                result[i] = (byte) qualities[i];
-            }
-            return result;
-        }
-
         public int getMappingQuality() {
             return mappingQuality;
         }
@@ -203,6 +179,4 @@ public final class Template implements Serializable {
             }
         }
     }
-
-
 }

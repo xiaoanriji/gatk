@@ -210,5 +210,4 @@ public final class TemplateMapping implements Serializable {
         }
         return false;
     }
-
 }

@@ -468,10 +468,6 @@ public final class AlignmentInterval {
         return (forwardStrand) ? cigarAlong5to3DirectionOfContig : CigarUtils.invertCigar(cigarAlong5to3DirectionOfContig);
     }
 
-    public PositionMatcher getPositionMatcher() {
-        return new PositionMatcher();
-    }
-
     /**
      * Composes a list of alignment-interval records based on a {@link String} representation.
      * @param str the input string representation.
@@ -550,35 +546,6 @@ public final class AlignmentInterval {
         result = 31 * result + alnScore;
         result = 31 * result + alnModType.ordinal();
         return result;
-    }
-
-    /**
-     * Composes the Supplementary Alignment string that corresponds to the information contain in this interval with respect to
-     * how it maps against the reference.
-     * <p>
-     * The format is the one described in {@link #AlignmentInterval(String)}. Notice that no ';' is appended at the end.
-     * <p>
-     *
-     * @return never {@code null}.
-     */
-    public String toSumpplementaryAlignmentString() {
-        final StringBuilder builder = new StringBuilder(100);
-        builder.append(referenceSpan.getContig()).append(',')
-               .append(referenceSpan.getStart()).append(',')
-               .append(forwardStrand ? '+' : '-').append(',')
-               .append(forwardStrand
-                       ? cigarAlong5to3DirectionOfContig
-                       : CigarUtils.invertCigar(cigarAlong5to3DirectionOfContig)).append(',')
-               .append(mapQual);
-        if (mismatches != NO_NM) {
-            builder.append(',').append(mismatches);
-        }
-        if (alnScore != NO_AS) {
-            builder.append(',').append(alnScore);
-        } else {
-            builder.setLength(builder.length());
-        }
-        return builder.toString();
     }
 
     /**
@@ -756,162 +723,6 @@ public final class AlignmentInterval {
         return new Tuple2<>(start, end);
     }
 
-    /**
-     * Convenient component to resolve the correspondence between matching based in the sequence vs the reference
-     * within the alignment interval.
-     */
-    private class PositionMatcher {
-
-        /**
-         * Cached reference to the list of cigar-elements:
-         */
-        private final CigarElement[] cigarElements;
-
-        /**
-         *
-         */
-        private final AlignmentInterval interval;
-
-        /**
-         * Contains the position of the sequence (1-based) of the first base in the first cigar element that consumes
-         * bases sequence bases starting from the i-th element (0-based.
-         * <p>
-         * So if the i-th cigar element is an alignment, insertion or clipping then the value in the i-th position is the
-         * same as the position in the seq of the first base overlapped by that cigar, quite straight forward.
-         * </p>
-         * <p>In contrast when the i-th cigar element is something like a deletion, padding or N operator one need to look
-         * for the next cigar element that consumes sequence bases</p>
-         * <p>
-         * For example if the 2nd element is a deletion (D) and the 3rd is
-         * a alignment (M), then {@code cigarElementStartPositionInSeq[2]} is equal to
-         * the first matching base in 3th element as deletion
-         * do not consume sequence bases.
-         * </p>
-         * <p>
-         *     the last position refers always contain the position after the last matched in the sequence.
-         * </p>
-         */
-        private final int[] cigarElementStartPositionInSeq;
-
-        /**
-         * Similarly to {@link #cigarElementStartPositionInSeq} but this contains the corresponding first reference
-         * base.
-         * <p>
-         *     If the alignment interval sits on the forward-strand, then values are ascendent whereas if the interval
-         *     maps to the negative strand values are descenent.
-         * </p>
-         * <p>
-         *     Clipping cigar elements before the first matching operator ha a value equal to the first reference bases matched by
-         *     the interval if on the forward strand, the last matched based in on the reverse strand.
-         * </p>
-         * <p>
-         *     Clipping cigar elements after the last matching operator ha a value just 1 over the last matched reference bases if
-         *     on the forward strand, 1 under the first matched reference base if on the reverse strand.
-         * </p>
-         * <p>
-         *     The last position always contains the position after (or before for the reverse strand) the last matched in the
-         *     reference.
-         * </p>
-         */
-        private final int[] cigarElementStartPositionInRef;
-
-        private PositionMatcher() {
-            interval = AlignmentInterval.this;
-            cigarElements = cigarAlong5to3DirectionOfContig.getCigarElements().toArray(new CigarElement[cigarAlong5to3DirectionOfContig.numCigarElements()]);
-            cigarElementStartPositionInRef = new int[cigarElements.length + 1];
-            cigarElementStartPositionInSeq = new int[cigarElements.length + 1];
-            int previousSeqPosition = cigarElementStartPositionInSeq[0] = 1;
-            int previousRefPosition = cigarElementStartPositionInRef[0] = forwardStrand ? referenceSpan.getStart() : referenceSpan.getEnd();
-            final int endOfReferenceAlignmentPosition = forwardStrand ? referenceSpan.getEnd() + 1 : referenceSpan.getStart() - 1;
-            for (int i = 0; i < cigarElements.length; i++) {
-                final CigarElement cigarElement  = cigarElements[i];
-                final CigarOperator cigarOperator = cigarElement.getOperator();
-                final int cigarLength = cigarElement.getLength();
-                previousSeqPosition = cigarElementStartPositionInSeq[i + 1]
-                        = cigarOperator.consumesReadBases() || cigarOperator.isClipping()
-                             ? cigarLength + previousSeqPosition
-                             : previousSeqPosition;
-                previousRefPosition = cigarElementStartPositionInRef[i + 1]
-                        = previousSeqPosition <= startInAssembledContig || previousRefPosition == endOfReferenceAlignmentPosition
-                        ? previousRefPosition  // if before any alignment or after any alignment, the we just propagate the value forward.
-                        : cigarOperator.consumesReferenceBases()
-                            ? (forwardStrand ? cigarLength + previousRefPosition : previousRefPosition - cigarLength)
-                            : previousRefPosition;
-            }
-        }
-
-        /**
-         * Return true iff the enclosing alignment intervals don't overlap in either the reference or the contig
-         * or they do and the overlapping position in the contig match the same ones in the reference.
-         * @param other the other interval position matcher.
-         */
-        public boolean isCompatibleWith(final PositionMatcher other) {
-            Utils.nonNull(other);
-            final boolean refOverlap = referenceSpan.overlaps(other.interval.referenceSpan);
-            final boolean seqOverlap = interval.overlapOnContig(other.interval);
-            if (refOverlap != seqOverlap) { // if ref doesnt overlap then seq must not to be compatible.
-                return false;
-            } else if (!refOverlap) { // neither overlap then they are also compatible.
-                return true;
-            } else {
-                final int maxStart = Math.max(startInAssembledContig, other.interval.startInAssembledContig);
-                final int minEnd = Math.min(endInAssembledContig, other.interval.endInAssembledContig);
-                final int thisStartIndex = findEnclosingElementIndex(maxStart, 0);
-                final int otherStartIndex = other.findEnclosingElementIndex(maxStart, 0);
-                int nextPosition = maxStart;
-                for (int i = thisStartIndex, j = otherStartIndex; nextPosition <= minEnd;) {
-                    if (cigarElements[i].getOperator().isAlignment() != other.cigarElements[j].getOperator().isAlignment()) {
-                        return false;
-                    } else if (cigarElements[i].getOperator().isAlignment()) {
-                        final int thisRefPosition = nextPosition - cigarElementStartPositionInSeq[i] + cigarElementStartPositionInRef[j];
-                        final int otherRefPosition = nextPosition - other.cigarElementStartPositionInSeq[j] + other.cigarElementStartPositionInRef[j];
-                        if (thisRefPosition != otherRefPosition) {
-                            return false;
-                        }
-                    }
-                    nextPosition = Math.min(cigarElementStartPositionInSeq[i + 1], cigarElementStartPositionInSeq[j + 1]);
-                    i = findEnclosingElementIndex(nextPosition, i);
-                    j = findEnclosingElementIndex(nextPosition, j);
-                }
-                return true;
-            }
-        }
-
-        private int findEnclosingElementIndex(final int position, final int from) {
-            for (int i = from + 1; i < cigarElementStartPositionInSeq.length; i++) {
-                if (cigarElementStartPositionInSeq[i] > position) {
-                    return i - 1;
-                }
-            }
-            return -1;
-        }
-    }
-
-    public boolean overlapOnContig(final AlignmentInterval other) {
-        Utils.nonNull(other);
-        return other.endInAssembledContig >= startInAssembledContig
-                && endInAssembledContig >= other.startInAssembledContig;
-    }
-
-    public boolean compatibleWith(final AlignmentInterval other) {
-        return getPositionMatcher().isCompatibleWith(other.getPositionMatcher());
-    }
-
-    /**
-     * Returns the reciprocal alignment interval given the enclosing contig name and reference sequence length.
-     * @param contigName
-     * @param referenceLength
-     * @return never {@code null}
-     */
-    public AlignmentInterval reciprocal(final String contigName, final int referenceLength) {
-        final SimpleInterval newReferenceSpan = new SimpleInterval(contigName, startInAssembledContig, endInAssembledContig);
-        final int newStartInAssembledContig = referenceSpan.getStart();
-        final int newEndInAssembledContig = referenceSpan.getEnd();
-        final Cigar cigar = CigarUtils.complement(cigarAlongReference(), referenceSpan.getStart() - 1,
-                referenceLength - referenceSpan.getEnd(), CigarOperator.H);
-        return new AlignmentInterval(newReferenceSpan, newStartInAssembledContig, newEndInAssembledContig, cigar, forwardStrand, mapQual, mismatches, alnScore, alnModType);
-    }
-
     public List<SimpleInterval> referenceCoveredIntervals() {
         int referencePos = referenceSpan.getStart();
         final Cigar cigar = cigarAlongReference();
@@ -927,9 +738,4 @@ public final class AlignmentInterval {
         }
         return result;
     }
-
-    public int getBaseMismatches() {
-        return mismatches == NO_NM ? NO_NM : mismatches - CigarUtils.countIndelBases(cigarAlong5to3DirectionOfContig);
-    }
-
 }

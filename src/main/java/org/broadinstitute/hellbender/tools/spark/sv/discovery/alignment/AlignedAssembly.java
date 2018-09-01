@@ -9,7 +9,6 @@ import com.google.common.annotations.VisibleForTesting;
 import java.util.ArrayList;
 import java.util.List;
 
-
 /**
  * Holding necessary information about a local assembly for use in SV discovery.
  */
@@ -73,4 +72,5 @@ public final class AlignedAssembly {
         result = 31 * result + alignedContigs.hashCode();
         return result;
     }
+    
 }

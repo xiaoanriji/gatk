@@ -69,7 +69,7 @@ public final class SparkSharder implements AutoCloseable {
         this.locator = Utils.nonNull(svIntervalLocator);
         this.shards = new SVIntervalTree<>();
         for (final L element : intervals) {
-            this.shards.put(locator.toSVInterval(element), SimpleInterval.of(element));
+            this.shards.put(locator.toSVInterval(element), SimpleInterval.valueOf(element));
         }
         Utils.nonNull(intervals, "the input shard intervals list must be greater than 0");
         //this.maxLocatableLength = ParamUtils.isPositive(maxLocatableLength, "the maximum locatable length must be greater than 0");
@@ -314,13 +314,15 @@ public final class SparkSharder implements AutoCloseable {
      * Turn a pair of iterators over intervals and locatables, into a single iterator over pairs made up of an interval and
      * the locatables that overlap it. Intervals with no overlapping locatables are dropped.
      */
-    static <L extends Locatable, I extends Locatable> Iterator<Tuple2<I, Iterable<L>>> locatablesPerShard(Iterator<L> locatables, Iterator<I> shards, SAMSequenceDictionary sequenceDictionary, int maxLocatableLength) {
+    static <L extends Locatable, I extends Locatable> Iterator<Tuple2<I, Iterable<L>>> locatablesPerShard(
+            final Iterator<L> locatables, final Iterator<I> shards, final SAMSequenceDictionary sequenceDictionary,
+            final int maxLocatableLength) {
         if (!shards.hasNext()) {
             return Collections.emptyIterator();
         }
-        PeekingIterator<L> peekingLocatables = Iterators.peekingIterator(locatables);
-        PeekingIterator<I> peekingShards = Iterators.peekingIterator(shards);
-        Iterator<Tuple2<I, Iterable<L>>> iterator = new AbstractIterator<Tuple2<I, Iterable<L>>>() {
+        final PeekingIterator<L> peekingLocatables = Iterators.peekingIterator(locatables);
+        final PeekingIterator<I> peekingShards = Iterators.peekingIterator(shards);
+        final Iterator<Tuple2<I, Iterable<L>>> iterator = new AbstractIterator<Tuple2<I, Iterable<L>>>() {
             // keep track of current and next, since locatables can overlap two shards
             I currentShard = peekingShards.next();
             I nextShard = peekingShards.hasNext() ? peekingShards.next() : null;
@@ -451,8 +453,6 @@ public final class SparkSharder implements AutoCloseable {
         ClassTag<T> tag = ClassTag$.MODULE$.apply(cls);
         return new JavaRDD<>(coalescedRdd, tag);
     }
-
-
 
     private static class KeyPartitioner extends Partitioner {
 

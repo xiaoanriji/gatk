@@ -5,11 +5,12 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
+import org.broadinstitute.hellbender.utils.Utils;
 
 import java.util.Iterator;
 
 /**
- * Simplest shard given an interval and a iterable over the elements in that shard,
+ * Simplest {@link Shard} given an interval and an iterable over the elements in that shard.
  */
 @DefaultSerializer(SimpleShard.Serializer.class)
 public final class SimpleShard<T> implements Shard<T> {
@@ -23,6 +24,8 @@ public final class SimpleShard<T> implements Shard<T> {
     }
 
     public static <T>  SimpleShard<T> of(final SimpleInterval interval, final Iterable<T> elements) {
+        Utils.nonNull(interval);
+        Utils.nonNull(elements);
         return new SimpleShard<>(interval, elements);
     }
 
