@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class FuncotatorTestUtils {
-    public FuncotatorTestUtils() {}
+    private FuncotatorTestUtils() {}
 
 
     /**
@@ -44,9 +44,7 @@ public class FuncotatorTestUtils {
                 funcotationFactories.stream()
                         .collect(Collectors.toMap(ff -> ff.getMainSourceFileAsFeatureInput(), ff -> ff.getAnnotationFeatureClass()));
 
-        final FeatureManager featureManager = new FeatureManager(featureInputsWithType, dummyToolInstanceName,
+        return FeatureContext.create(featureInputsWithType, dummyToolInstanceName, interval,
                 featureQueryLookahead, cloudPrefetchBuffer, cloudIndexPrefetchBuffer, reference);
-
-        return new FeatureContext(featureManager, interval);
     }
 }

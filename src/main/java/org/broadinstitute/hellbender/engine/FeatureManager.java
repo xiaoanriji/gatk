@@ -1,6 +1,5 @@
 package org.broadinstitute.hellbender.engine;
 
-import com.google.common.annotations.VisibleForTesting;
 import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.tribble.Feature;
 import htsjdk.tribble.FeatureCodec;
@@ -15,6 +14,7 @@ import org.broadinstitute.hellbender.cmdline.CommandLineProgram;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
+import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.config.ConfigFactory;
 import org.broadinstitute.hellbender.utils.config.GATKConfig;
 
@@ -155,18 +155,25 @@ public final class FeatureManager implements AutoCloseable {
     }
 
     /**
-     * TODO: Fill this in.
-     * @param featureInputsToTypeMap
-     * @param toolInstanceName
-     * @param featureQueryLookahead
-     * @param cloudPrefetchBuffer
-     * @param cloudIndexPrefetchBuffer
-     * @param reference
+     * Same as {@link FeatureManager#FeatureManager(CommandLineProgram, int, int, int, Path)}, except used when the
+     *  FeatureInputs (and associated types) are known.
+     *
+     *  This constructor should only be used in test code.
+     *
+     * @param featureInputsToTypeMap {@link Map} of a {@link FeatureInput} to the output type that must extend {@link Feature}.  Never {@code null}
+     * @param toolInstanceName See {@link FeatureManager#FeatureManager(CommandLineProgram, int, int, int, Path)}
+     * @param featureQueryLookahead See {@link FeatureManager#FeatureManager(CommandLineProgram, int, int, int, Path)}
+     * @param cloudPrefetchBuffer See {@link FeatureManager#FeatureManager(CommandLineProgram, int, int, int, Path)}
+     * @param cloudIndexPrefetchBuffer See {@link FeatureManager#FeatureManager(CommandLineProgram, int, int, int, Path)}
+     * @param reference See {@link FeatureManager#FeatureManager(CommandLineProgram, int, int, int, Path)}
      */
-    @VisibleForTesting
-    public FeatureManager(final Map<FeatureInput<? extends Feature>, Class<? extends Feature>> featureInputsToTypeMap, final String toolInstanceName, final int featureQueryLookahead, final int cloudPrefetchBuffer, final int cloudIndexPrefetchBuffer, final Path reference) {
+    FeatureManager(final Map<FeatureInput<? extends Feature>, Class<? extends Feature>> featureInputsToTypeMap, final String toolInstanceName, final int featureQueryLookahead, final int cloudPrefetchBuffer, final int cloudIndexPrefetchBuffer, final Path reference) {
+
+        Utils.nonNull(featureInputsToTypeMap);
+
         this.toolInstanceSimpleClassName = toolInstanceName;
         this.featureSources = new LinkedHashMap<>();
+        Utils.nonNull(featureInputsToTypeMap);
         featureInputsToTypeMap.forEach((k,v) -> addToFeatureSources(featureQueryLookahead, k, v, cloudPrefetchBuffer, cloudIndexPrefetchBuffer, reference));
     }
 
