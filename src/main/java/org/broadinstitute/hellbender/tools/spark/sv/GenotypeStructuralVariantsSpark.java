@@ -1289,10 +1289,10 @@ public class GenotypeStructuralVariantsSpark extends GATKSparkTool {
     private static void adjustLikelihoodCalculatorAlleleFrequencies(final SVGenotypingContext context, final InsertSizeDistribution insertSizeDistribution, final GenotypeLikelihoodCalculator genotypeCalculator) {
         if (context.variant.isInsertion()) {
             final int length = context.variant.getStructuralVariantLength();
-            final double insertAverageSize = insertSizeDistribution.average();
+            final double insertAverageSize = insertSizeDistribution.mean();
             genotypeCalculator.setRelativeAlleleFrequency(insertAverageSize, Math.min(2 * insertAverageSize, insertAverageSize + length));
         } else if (context.variant.isDeletion()) {
-            final double insertAverageSize = insertSizeDistribution.average();
+            final double insertAverageSize = insertSizeDistribution.mean();
             final int length = context.variant.getStructuralVariantLength();
             genotypeCalculator.setRelativeAlleleFrequency(Math.min(insertAverageSize * 2, insertAverageSize + length), insertAverageSize);
         } else {
