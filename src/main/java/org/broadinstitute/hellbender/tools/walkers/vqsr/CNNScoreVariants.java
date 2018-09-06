@@ -92,8 +92,8 @@ import java.util.stream.StreamSupport;
  *   -weights path/to/my_weights.hd5
  * </pre>
  */
+@BetaFeature
 @DocumentedFeature
-@ExperimentalFeature
 @CommandLineProgramProperties(
         summary = CNNScoreVariants.USAGE_SUMMARY,
         oneLineSummary = CNNScoreVariants.USAGE_ONE_LINE_SUMMARY,
@@ -233,6 +233,10 @@ public class CNNScoreVariants extends TwoPassVariantWalker {
 
     @Override
     public void onTraversalStart() {
+        if (getHeaderForVariants().getGenotypeSamples().size() > 1) {
+            logger.warn("CNNScoreVariants is a single sample tool, but the input VCF has more than 1 sample.");
+        }
+
         scoreKey = getScoreKeyAndCheckModelAndReadsHarmony();
         if (architecture == null && weights == null) {
             setArchitectureAndWeightsFromResources();
