@@ -500,12 +500,12 @@ public class Funcotator extends VariantWalker {
         // Make sure the user knows this by making a HUGE stink about it.
         if ( onlySawIGRs ) {
             logger.warn("================================================================================");
-            logger.warn("                           __        __               _             ");
-            logger.warn("               \\ \\      / /_ _ _ __ _ __ (_)_ __   __ _ ");
-            logger.warn("                \\ \\ /\\ / / _` | '__| '_ \\| | '_ \\ / _` |");
-            logger.warn("                 \\ \\V  V / (_| | |  | | | | | | | | (_| |");
-            logger.warn("                  \\_/\\_/ \\__,_|_|  |_| |_|_|_| |_|\\__, |");
-            logger.warn("                                                  |___/");
+            logger.warn("\u001B[43m     _  _  _   __        __               _                   _  _  _           ");
+            logger.warn("    | || || |  \\ \\      / /_ _ _ __ _ __ (_)_ __   __ _      | || || |        ");
+            logger.warn("    | || || |   \\ \\ /\\ / / _` | '__| '_ \\| | '_ \\ / _` |     | || || |     ");
+            logger.warn("    |_||_||_|    \\ \\V V / (_| | |  | | | | | | | | (_| |     |_||_||_|        ");
+            logger.warn("    (_)(_)(_)     \\_/\\_/ \\__,_|_|  |_| |_|_|_| |_|\\__, |     (_)(_)(_)      ");
+            logger.warn("                                                  |___/                         \u001B[0;0m");
             logger.warn("--------------------------------------------------------------------------------");
             logger.warn(" Only IGRs were produced for this dataset.  This STRONGLY indicates that this   ");
             logger.warn(" run was misconfigured.     ");
@@ -514,6 +514,7 @@ public class Funcotator extends VariantWalker {
         }
         return true;
     }
+
 
     @Override
     public void closeTool() {

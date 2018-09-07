@@ -50,8 +50,9 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
 
     // Whether to do debug output (i.e. leave output around).
     // This should always be false when checked in.
-    private static final boolean doDebugTests = true;
-    private static final String LARGE_DATASOURCES_FOLDER = "funcotator_dataSources_latest";
+    // These tests would take ~30 minutes to complete each.
+    private static final boolean enableFullScaleTests = true;
+    private static final String  LARGE_DATASOURCES_FOLDER = "funcotator_dataSources_latest";
 
     private static final String XSV_CLINVAR_MULTIHIT_TEST_VCF = toolsTestDir + "funcotator" + File.separator + "clinvar_hg19_multihit_test.vcf";
     private static final String DS_XSV_CLINVAR_TESTS          = largeFileTestDir + "funcotator" + File.separator + "small_ds_clinvar_hg19" + File.separator;
@@ -89,7 +90,7 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
     private static String hg19Chr19Ref;
 
     static {
-        if (!doDebugTests) {
+        if (!enableFullScaleTests ) {
             tmpOutDir = createTempDir("funcotatorTmpFolder");
         } else {
             tmpOutDir = new File("funcotatorTmpFolder" + File.separator);
@@ -115,7 +116,7 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
     private static File getOutputFile(final String outfileBaseName,
                                       final String outFileExtension) {
         final File outputFile;
-        if (!doDebugTests) {
+        if (!enableFullScaleTests ) {
             outputFile = createTempFile(tmpOutDir + File.separator + outfileBaseName, "." + outFileExtension);
         } else {
             outputFile = new File(tmpOutDir, outfileBaseName + "." + outFileExtension);
@@ -267,35 +268,41 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
     @DataProvider
     public Object[][] provideForLargeDataValidationTest() {
         return new Object[][]{
+//TODO: DEBUGGING
+//                {
+//                        "M2_01115161-TA1-filtered.vcf",
+//                        "Homo_sapiens_assembly19.fasta",
+//                        FuncotatorTestConstants.REFERENCE_VERSION_HG19,
+//                },
+//                {
+//                        "C828.TCGA-D3-A2JP-06A-11D-A19A-08.3-filtered.PASS.vcf",
+//                        "Homo_sapiens_assembly19.fasta",
+//                        FuncotatorTestConstants.REFERENCE_VERSION_HG19
+//                },
+//                {
+//                        "hg38_test_variants.vcf",
+//                        "Homo_sapiens_assembly38.fasta",
+//                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
+//                },
+//                {
+//                        "sample21.trimmed.vcf",
+//                        "Homo_sapiens_assembly38.fasta",
+//                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
+//                },
+//                {
+//                        "0816201804HC0_R01C01.vcf",
+//                        "Homo_sapiens_assembly19.fasta",
+//                        FuncotatorTestConstants.REFERENCE_VERSION_HG19
+//                },
+//                {
+//                        "hg38_trio.vcf",
+//                        "Homo_sapiens_assembly38.fasta",
+//                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
+//                },
                 {
-                        "M2_01115161-TA1-filtered.vcf",
-                        "Homo_sapiens_assembly19.fasta",
-                        FuncotatorTestConstants.REFERENCE_VERSION_HG19,
-                },
-                {
-                        "C828.TCGA-D3-A2JP-06A-11D-A19A-08.3-filtered.PASS.vcf",
+                        "regressionTestVariantSet1.vcf",
                         "Homo_sapiens_assembly19.fasta",
                         FuncotatorTestConstants.REFERENCE_VERSION_HG19
-                },
-                {
-                        "hg38_test_variants.vcf",
-                        "Homo_sapiens_assembly38.fasta",
-                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
-                },
-                {
-                        "sample21.trimmed.vcf",
-                        "Homo_sapiens_assembly38.fasta",
-                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
-                },
-                {
-                        "0816201804HC0_R01C01.vcf",
-                        "Homo_sapiens_assembly19.fasta",
-                        FuncotatorTestConstants.REFERENCE_VERSION_HG19
-                },
-                {
-                        "hg38_trio.vcf",
-                        "Homo_sapiens_assembly38.fasta",
-                        FuncotatorTestConstants.REFERENCE_VERSION_HG38
                 },
         };
     }
@@ -306,7 +313,7 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
     // It will force anyone who changes the outputToTmpDir flag to make it true when they check in this test file.
     @Test(groups = {"funcotatorValidation"})
     public void metaTestEnsureTempDirs() {
-        Assert.assertEquals(doDebugTests, false);
+        Assert.assertEquals(enableFullScaleTests, false);
     }
 
     @Test(dataProvider = "provideForIntegrationTest")
@@ -343,7 +350,7 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
         }
     }
 
-    @Test(enabled = doDebugTests,
+    @Test(enabled = enableFullScaleTests,
           groups = {"funcotatorValidation"},
           dataProvider = "provideForLargeDataValidationTest")
     public void largeDataValidationTest(final String inputVcfName,
