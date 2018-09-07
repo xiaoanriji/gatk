@@ -77,6 +77,12 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
     private static final int defaultNumTrailingBasesForUtrAnnotationSequenceConstruction = 3;
 
     /**
+     * The window for an indel to be within the end of a transcript to trigger padding the end of the
+     * transcript with additional bases from the reference.
+     */
+    private static final int TRANSCRIPT_END_WINDOW_PADDING_THRESHOLD = 10;
+
+    /**
      * The window around a variant to include in the reference context annotation.
      * Also used for context from which to get surrounding codon changes and protein changes.
      */
@@ -108,7 +114,7 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
     /**
      * The set of {@link GencodeFuncotation.VariantClassification} types that are valid for coding regions.
      */
-    private static final Set<GencodeFuncotation.VariantClassification> codingVariantClassifications =
+    private static final Set<GencodeFuncotation.VariantClassification> codingVariantClassifications  =
             Sets.newHashSet(Arrays.asList(GencodeFuncotation.VariantClassification.MISSENSE,
                                           GencodeFuncotation.VariantClassification.NONSENSE,
                                           GencodeFuncotation.VariantClassification.NONSTOP,
@@ -476,11 +482,13 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
      * @param transcriptId The ID of the transcript to get from the FASTA file.
      * @param transcriptIdMap A map from transcriptId to MappedTranscriptIdInfo, which tells us how to pull information for the given {@code transcriptId} out of the given {@code transcriptFastaReferenceDataSource}.
      * @param transcriptFastaReferenceDataSource A {@link ReferenceDataSource} for the GENCODE transcript FASTA file.
+     * @param transcriptTailPaddingBaseString Bases to add to the end of the transcript base string to enable processing variants that overrrun the end of the transcript.
      * @return The coding sequence for the given {@code transcriptId} as represented in the GENCODE transcript FASTA file.
      */
     private static String getCodingSequenceFromTranscriptFasta( final String transcriptId,
                                                                 final Map<String, MappedTranscriptIdInfo> transcriptIdMap,
-                                                                final ReferenceDataSource transcriptFastaReferenceDataSource) {
+                                                                final ReferenceDataSource transcriptFastaReferenceDataSource,
+                                                                final String transcriptTailPaddingBaseString) {
 
         final MappedTranscriptIdInfo transcriptMapIdAndMetadata = transcriptIdMap.get(transcriptId);
 
@@ -494,7 +502,7 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
                 transcriptMapIdAndMetadata.codingSequenceEnd
         );
 
-        return transcriptFastaReferenceDataSource.queryAndPrefetch( transcriptInterval ).getBaseString();
+        return transcriptFastaReferenceDataSource.queryAndPrefetch( transcriptInterval ).getBaseString() + transcriptTailPaddingBaseString;
     }
 
     /**
@@ -1331,7 +1339,7 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
                     reference.getWindow().getEnd() + referenceWindow + indelAdjustment);
 
         // Get the reference bases for this interval.
-        byte[] referenceBases = reference.getBases(refBasesInterval);
+        final byte[] referenceBases = reference.getBases(refBasesInterval);
 
         // Get the bases in the correct direction:
         if ( strand == Strand.POSITIVE ) {
@@ -1588,8 +1596,16 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
         if ( processSequenceInformation ) {
             if ( transcriptIdMap.containsKey(transcript.getTranscriptId()) ) {
 
+                // Get padding bases just in case this variant is an indel and trails off the end of our transcript:
+                final String transcriptTailPaddingBaseString = getTranscriptEndPaddingBases(variant, altAllele, exonPositionList, reference);
+
                 // NOTE: This can't be null because of the Funcotator input args.
-                final String transcriptSequence = getCodingSequenceFromTranscriptFasta(transcript.getTranscriptId(), transcriptIdMap, transcriptFastaReferenceDataSource);
+                final String transcriptSequence = getCodingSequenceFromTranscriptFasta(
+                                                            transcript.getTranscriptId(),
+                                                            transcriptIdMap,
+                                                            transcriptFastaReferenceDataSource,
+                                                            transcriptTailPaddingBaseString
+                );
 
                 // Get the transcript sequence as described by the given exonPositionList:
                 sequenceComparison.setTranscriptCodingSequence(new ReferenceSequence(transcript.getTranscriptId(), transcript.getStart(), transcriptSequence.getBytes()));
@@ -1642,6 +1658,48 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
         //=============================================================================================================
 
         return sequenceComparison;
+    }
+
+    private static String getTranscriptEndPaddingBases(final VariantContext variant,
+                                                       final Allele altAllele,
+                                                       final List<? extends htsjdk.samtools.util.Locatable> exonPositionList,
+                                                       final ReferenceContext reference) {
+
+        // We pad the end of the transcript to allow for the case where an indel runs off the end of a transcript
+        // and needs to be annotated.
+        // One variant where this happens is:
+        //   <B37 Ref>:  1:178514560 A->AT
+        //
+        // We need only do this when the variant is close to the end of the transcript.
+        //
+        // Unfortunately we need to pad the end by the number of bases beyond the boundary, rounded up to the
+        // next codon end position.
+        // This corresponds to (with an extra codon for safety):
+        //        (Math.ceil(<number of inserted bases>/3)+1)*3
+        // This is a problem because transcriptFastaReferenceDataSource has only the bases in a given transcript.
+        // Because of this we need to go to the real reference sequence and grab additional bases to pad onto the
+        // end of the transcript coding sequence.
+
+
+        final int transcriptEndGenomicPosition = exonPositionList.get(exonPositionList.size()-1).getEnd();
+        // Add one because of inclusive positions:
+        final int basesToTranscriptEnd = transcriptEndGenomicPosition - variant.getStart() + 1;
+
+        final byte[] transcriptTailPaddingBases;
+        if ( (variant.getType() == VariantContext.Type.INDEL) &&
+                (basesToTranscriptEnd < TRANSCRIPT_END_WINDOW_PADDING_THRESHOLD) ) {
+            final int numIndelBases = Math.abs(variant.getReference().length() - altAllele.length());
+            final int numPaddingBases = (int)((Math.ceil(numIndelBases/3.0)+1)*3);
+
+            // Get extra bases from the reference:
+            transcriptTailPaddingBases = reference.getBases(new SimpleInterval(reference.getWindow().getContig(), transcriptEndGenomicPosition+1, transcriptEndGenomicPosition + numPaddingBases));
+        }
+        else {
+            // No bases needed:
+            transcriptTailPaddingBases = new byte[]{};
+        }
+
+        return new String(transcriptTailPaddingBases);
     }
 
     /**

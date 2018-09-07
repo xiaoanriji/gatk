@@ -1444,7 +1444,7 @@ public final class FuncotatorUtils {
             final String substitutedAlignedAlleleSeq = getAlignedAlleleSequence(substitutedAlignedSeq, alignedAlleleStart, alignedAlleleStop, Strand.POSITIVE);
 
             // Warn the user!
-            logger.warn("Reference allele is different than the reference coding sequence!  Substituting given allele for sequence code (" + alignedAlleleSeq + "->" + substitutedAlignedAlleleSeq + ")");
+            logger.warn("Reference allele differs from reference coding sequence (Allele " + expectedReferenceSequence + " != " + refAllele.getBaseString() + " coding sequence)!  Substituting given allele for sequence code (" + alignedAlleleSeq + "->" + substitutedAlignedAlleleSeq + ")");
 
             // Set up our return value:
             alignedAlleleSeq = substitutedAlignedAlleleSeq;

@@ -318,6 +318,8 @@ public class Funcotator extends VariantWalker {
 
     private FuncotationMetadata inputMetadata;
 
+    private boolean onlySawIGRs = true;
+
     //==================================================================================================================
 
     @Override
@@ -493,6 +495,23 @@ public class Funcotator extends VariantWalker {
 
     @Override
     public Object onTraversalSuccess() {
+
+        // If we only saw IGRs, we most likely have a configuration issue.
+        // Make sure the user knows this by making a HUGE stink about it.
+        if ( onlySawIGRs ) {
+            logger.warn("================================================================================");
+            logger.warn("                           __        __               _             ");
+            logger.warn("               \\ \\      / /_ _ _ __ _ __ (_)_ __   __ _ ");
+            logger.warn("                \\ \\ /\\ / / _` | '__| '_ \\| | '_ \\ / _` |");
+            logger.warn("                 \\ \\V  V / (_| | |  | | | | | | | | (_| |");
+            logger.warn("                  \\_/\\_/ \\__,_|_|  |_| |_|_|_| |_|\\__, |");
+            logger.warn("                                                  |___/");
+            logger.warn("--------------------------------------------------------------------------------");
+            logger.warn(" Only IGRs were produced for this dataset.  This STRONGLY indicates that this   ");
+            logger.warn(" run was misconfigured.     ");
+            logger.warn(" You MUST check your data sources to make sure they are correct for these data.");
+            logger.warn("================================================================================");
+        }
         return true;
     }
 
@@ -569,7 +588,15 @@ public class Funcotator extends VariantWalker {
         final List<GencodeFuncotation> transcriptFuncotations = retrieveGencodeFuncotationFactoryStream()
                 .map(gf -> gf.createFuncotations(variant, referenceContext, featureSourceMap))
                 .flatMap(List::stream)
-                .map(gf -> (GencodeFuncotation) gf).collect(Collectors.toList());
+                .map(f -> {
+                        final GencodeFuncotation gf = (GencodeFuncotation) f;
+                        if (onlySawIGRs && (gf.getVariantClassification() != GencodeFuncotation.VariantClassification.IGR)) {
+                            onlySawIGRs = false;
+                        }
+                        return gf;
+                    }
+                )
+                .collect(Collectors.toList());
 
         //==============================================================================================================
         // Create the funcotations for non-Gencode data sources:

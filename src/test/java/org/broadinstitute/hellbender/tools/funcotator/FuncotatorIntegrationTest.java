@@ -50,7 +50,7 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
 
     // Whether to do debug output (i.e. leave output around).
     // This should always be false when checked in.
-    private static final boolean doDebugTests = false;
+    private static final boolean doDebugTests = true;
     private static final String LARGE_DATASOURCES_FOLDER = "funcotator_dataSources_latest";
 
     private static final String XSV_CLINVAR_MULTIHIT_TEST_VCF = toolsTestDir + "funcotator" + File.separator + "clinvar_hg19_multihit_test.vcf";
@@ -128,7 +128,7 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
         // ================================================================================
         // Annotation Defaults:
         arguments.addArgument(FuncotatorArgumentDefinitions.ANNOTATION_DEFAULTS_LONG_NAME, "dbSNP_RS:0");
-        arguments.addArgumentWithValueThatIncludesWhitespace(FuncotatorArgumentDefinitions.ANNOTATION_DEFAULTS_LONG_NAME, "dbSNP_Val_Status:No Value");
+        arguments.addArgumentWithValueThatIncludesWhitespace(FuncotatorArgumentDefinitions.ANNOTATION_DEFAULTS_LONG_NAME, "dbSNP_Val_Status:No_Value");
         arguments.addArgument(FuncotatorArgumentDefinitions.ANNOTATION_DEFAULTS_LONG_NAME, "Center:broad.mit.edu");
         arguments.addArgument(FuncotatorArgumentDefinitions.ANNOTATION_DEFAULTS_LONG_NAME, "source:WES");
         arguments.addArgument(FuncotatorArgumentDefinitions.ANNOTATION_DEFAULTS_LONG_NAME, "normal_barcode:normal_sample");
@@ -296,7 +296,7 @@ public class FuncotatorIntegrationTest extends CommandLineProgramTest {
                         "hg38_trio.vcf",
                         "Homo_sapiens_assembly38.fasta",
                         FuncotatorTestConstants.REFERENCE_VERSION_HG38
-                }
+                },
         };
     }
 
