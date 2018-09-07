@@ -1561,7 +1561,8 @@ public class GencodeFuncotationFactory extends DataSourceFuncotationFactory {
                         referenceWindow,
                         refAllele,
                         sequenceComparison.getCodingSequenceAlleleStart(),
-                        sequenceComparison.getAlignedCodingSequenceAlleleStart())
+                        sequenceComparison.getAlignedCodingSequenceAlleleStart(),
+                        variant)
         );
 
         // Get the starting protein position of this variant.

@@ -1417,8 +1417,12 @@ public class FuncotatorUtilsUnitTest extends GATKBaseTest {
                                   final int codingSequenceRefAlleleStart,
                                   final int alignedRefAlleleStart,
                                   final String expected) {
+
+        // Make a Dummy Locatable for Logging:
+        final Locatable dummyLocatableForLogging = new SimpleInterval("ReferenceSnippet", 1, 100);
+
         Assert.assertEquals(
-                FuncotatorUtils.getAlignedRefAllele(referenceSnippet,referencePadding,refAllele,codingSequenceRefAlleleStart,alignedRefAlleleStart),
+                FuncotatorUtils.getAlignedRefAllele(referenceSnippet,referencePadding,refAllele,codingSequenceRefAlleleStart,alignedRefAlleleStart,dummyLocatableForLogging),
                 expected
         );
     }
