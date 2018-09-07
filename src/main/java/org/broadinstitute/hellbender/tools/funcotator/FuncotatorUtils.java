@@ -1505,7 +1505,7 @@ public final class FuncotatorUtils {
             final String substitutedAlignedAlleleSeq = substitutedReferenceSnippet.substring(refStartPos, refEndPos);
 
             // Warn the user!
-            final String positionString = '[' + variantGenomicPositionForLogging.getContig() + ":" + variantGenomicPositionForLogging.getStart() + "-" + variantGenomicPositionForLogging.getEnd() + ']';
+            final String positionString = '[' + variantGenomicPositionForLogging.getContig() + ":" + variantGenomicPositionForLogging.getStart() + ']';
             logger.warn("Reference allele is different than the reference coding sequence (ref " + refAllele.getBaseString() + " != " + computedReferenceAlleleWithSubstitution + " reference coding seq) @" + positionString + "!  Substituting given allele for sequence code (" + alignedReferenceAllele + "->" + substitutedAlignedAlleleSeq + ")");
 
             // Set up our return value:
